@@ -1,32 +1,4 @@
-calc_train_likelis_dev <- function(object) {
-  svd_data <- object[['Projections']][['SVD_Per_Time_Point']]
-  fitted_mvn_data <- object[['Projections']][['Fitted_MVN_Interpolated']]
-  train_exp_data <- object[['Train']][['Normalised_Train_Exp_Data']]
-  num_PC <- object[['PC_Num']]
-  train_likelihood_array <- base::array(data = NA, dim = c(dim(fitted_mvn_data)[2], dim(train_exp_data)[2], dim(fitted_mvn_data)[3]))
-  for (i in 1:length(names(svd_data))) {
-    project_exp_mat <- svd_data[[i]] %*% train_exp_data
-    mat <- foreach(ind_num = 1:dim(train_exp_data)[2], .combine = 'cbind', .inorder = TRUE, .packages = c('Matrix','mvtnorm','foreach')) %dopar% {
-      foreach(j = 1:dim(fitted_mvn_data)[2], .combine = 'c', .inorder = TRUE) %do% {
-        curr_sigma <- matrix(fitted_mvn_data[(num_PC+1):(num_PC+num_PC^2),j,i], nrow = num_PC)
-        curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
-        if (any(curr_eig < 0)) {
-          sigma_used <- nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE, eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat
-        } else {
-          sigma_used <- curr_sigma
-        }
-
-        vec <- mvtnorm::dmvnorm(project_exp_mat[,ind_num], mean = fitted_mvn_data[1:num_PC,j,i], sigma = sigma_used, checkSymmetry = FALSE)
-
-      }
-
-    }
-    train_likelihood_array[ , ,i] <- mat
-    cat("\rFinished", i, "of", length(names(svd_data)), "\n")
-  }
-  object[['Train_Data']][['Train_Likelihood_Array']] <- log(train_likelihood_array)
-  return(object)
-}
+## calc_train_likelis_dev removed — superseded by calc_train_likelis_dev_test (below)
 
 ## ---------------------------------------------------------------------------
 ## Parallel versions of theta and flat contribution (unified train/test)
@@ -127,6 +99,11 @@ calc_flat_theta_contrib_test_dev <- function(object) {
 
 
 ###
+# NOTE: These parallel likelihood functions use dmvnorm(..., log = TRUE) directly,
+# so the output is already on the log scale. This differs from the serial
+# calc_likelis() which calls dmvnorm() without log=TRUE and wraps in log() after.
+# Both produce identical log-likelihood arrays.
+
 calc_train_likelis_dev_test <- function(object) {
   svd_data <- object[['Projections']][['SVD_Per_Time_Point']]
   fitted_mvn_data <- object[['Projections']][['Fitted_MVN_Interpolated']]

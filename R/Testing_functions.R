@@ -6,7 +6,7 @@ normalise_test_data <- function(object, exp_matrix, test_grouping_vars, test_gro
     normalised_mat <- apply(exp_matrix, 2, function(x) {(x - mean(x)) / sd(x)})
   }
 
-  if (norm_method == 'clr') {
+  else if (norm_method == 'clr') {
     # Centred log-ratio: log(x) minus mean of log(x) per sample
     normalised_mat <- apply(exp_matrix, 2, function(x) log(x) - mean(log(x)))
   }

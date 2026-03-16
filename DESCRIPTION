@@ -42,5 +42,5 @@ Suggests:
     edgeR,
     tidytext
 VignetteBuilder: knitr
-URL: https://github.com/VadimVasilyev1994/TimeTeller, https://vadimvasilyev1994.github.io/TimeTeller/
-BugReports: https://github.com/VadimVasilyev1994/TimeTeller/issues
+URL: https://github.com/VadimVasilyev1994/TimeTeller-v2
+BugReports: https://github.com/VadimVasilyev1994/TimeTeller-v2/issues
