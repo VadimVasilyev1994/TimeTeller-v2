@@ -102,6 +102,8 @@ plot_genes <- function(object, genes, group1, group2) {
 #'
 
 plot_3d_projection <- function(object, selected_local_projection, density = FALSE, opacity = 0.05, sig_level = 0.90) {
+  check_suggested_pkg('plotly')
+  if (density) check_suggested_pkg('rgl')
   cov_method <- object[['Projections']][['Cov_Method']]
   projection_name <- paste0('Time_',selected_local_projection)
   data <- object[['Projections']][['All_Projections']][[`projection_name`]]
@@ -117,16 +119,16 @@ plot_3d_projection <- function(object, selected_local_projection, density = FALS
 
   knots_data <- data.frame(t(object[['Projections']][['Fitted_MVN_Original']][1:pc_num,,projection_name]))
 
-  fig <- plot_ly() %>%
-    add_trace(data = data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~data$sample_times, colors = my_colors,
+  fig <- plotly::plot_ly() %>%
+    plotly::add_trace(data = data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~data$sample_times, colors = my_colors,
               type = 'scatter3d',mode = 'markers',text = ~paste('Group:', Group, '<br>Sample Time:', sample_times), name = 'Train Data') %>%
-    add_trace(x = ~knots_data$mean_PC1, y = ~knots_data$mean_PC2, z = ~knots_data$mean_PC3, color = I('gray45'),
+    plotly::add_trace(x = ~knots_data$mean_PC1, y = ~knots_data$mean_PC2, z = ~knots_data$mean_PC3, color = I('gray45'),
               type = 'scatter3d',mode = 'markers', text = ~paste('Projection:', rownames(knots_data)),
               marker = list(size = 8, symbol = 'diamond'), name = 'Knots') %>%
-    add_trace(x = ~local_proj_spline$mean_PC1, y = ~local_proj_spline$mean_PC2, z = ~local_proj_spline$mean_PC3,
+    plotly::add_trace(x = ~local_proj_spline$mean_PC1, y = ~local_proj_spline$mean_PC2, z = ~local_proj_spline$mean_PC3,
               type = "scatter3d", mode = "lines", opacity = 1, color = I('gray45'),
               line = list(width = 6), hoverinfo='skip', showlegend = FALSE, name = 'Spline for Train Data') %>%
-    colorbar(title = "Time (Hours)")
+    plotly::colorbar(title = "Time (Hours)")
   if (density) {
     if (cov_method == 'normal') {
       # Generate local MVN plots
@@ -139,7 +141,7 @@ plot_3d_projection <- function(object, selected_local_projection, density = FALS
         curr_sigma <- data.mvnorm[[curr_proj_time]]$sigma
         curr_ellipse <- rgl::ellipse3d(curr_sigma, centre = curr_mean, level = sig_level)
         fig <- fig %>%
-          add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
+          plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
                     type = 'scatter3d',mode = 'markers', hoverinfo='skip', showlegend = FALSE, inherit = FALSE)
       }
     }
@@ -154,7 +156,7 @@ plot_3d_projection <- function(object, selected_local_projection, density = FALS
         curr_sigma <- data.mvnorm[[curr_proj_time]]$cov
         curr_ellipse <- rgl::ellipse3d(curr_sigma, centre = curr_mean, level = sig_level)
         fig <- fig %>%
-          add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
+          plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
                     type = 'scatter3d',mode = 'markers', hoverinfo='skip', showlegend = FALSE, inherit = FALSE)
       }
     }
@@ -182,6 +184,8 @@ plot_3d_projection <- function(object, selected_local_projection, density = FALS
 #'
 
 plot_3d_projection_with_test <- function(object, selected_local_projection, density = FALSE, opacity = 0.05, sig_level = 0.90) {
+  check_suggested_pkg('plotly')
+  if (density) check_suggested_pkg('rgl')
   projection_name <- paste0('Time_',selected_local_projection)
 
   test_data_projections <- data.frame(t(object[['Projections']][['SVD_Per_Time_Point']][[`projection_name`]] %*% object[['Test_Data']][['Normalised_Test_Exp_Data']]))
@@ -205,21 +209,21 @@ plot_3d_projection_with_test <- function(object, selected_local_projection, dens
   else if (length(object[['Test_Data']][['Thetas_Test']] < 250)) {selected_size <- 1.5}
   else {selected_size <- 0.75}
 
-  fig <- plot_ly() %>%
-    add_trace(data = data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~data$sample_times, colors = my_colors,
+  fig <- plotly::plot_ly() %>%
+    plotly::add_trace(data = data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~data$sample_times, colors = my_colors,
               type = 'scatter3d',mode = 'markers',text = ~paste('Group:', Group, '<br>Sample Time:', sample_times, '<br>Theta:', object[['Train_Data']][['Thetas_Train']]),
               name = 'Train Data') %>%
-    add_trace(x = ~test_data_projections$PC1, y = ~test_data_projections$PC2, z = ~test_data_projections$PC3,
+    plotly::add_trace(x = ~test_data_projections$PC1, y = ~test_data_projections$PC2, z = ~test_data_projections$PC3,
               type = 'scatter3d',mode = 'markers',
               text = ~paste('Theta:', object[['Test_Data']][['Thetas_Test']], '<br>Row_Num:', 1:length(object[['Test_Data']][['Thetas_Test']]),
                             '<br>Pred_Time:', object[['Test_Data']][['Results_df']]$time_1st_peak, '<br>Actual_Time:',object[['Test_Data']][['Results_df']]$Actual_Time,
                             '<br>Group_1:',object[['Metadata']][['Test']][['Group_1']], '<br>Group_2:',object[['Metadata']][['Test']][['Group_2']],
                             '<br>Group_3:',object[['Metadata']][['Test']][['Group_3']], '<br>Replicate:',object[['Metadata']][['Test']][['Replicate']]),
               marker = list(color = ~object[['Test_Data']][['Thetas_Test']], size = selected_size, symbol = 'square'), name = 'Test Data', inherit = FALSE) %>%
-    add_trace(x = ~local_proj_spline$mean_PC1, y = ~local_proj_spline$mean_PC2, z = ~local_proj_spline$mean_PC3,
+    plotly::add_trace(x = ~local_proj_spline$mean_PC1, y = ~local_proj_spline$mean_PC2, z = ~local_proj_spline$mean_PC3,
               type = "scatter3d", mode = "lines", opacity = 1, color = I('gray45'),
               line = list(width = 6) , name = 'Spline for Train Data') %>%
-    colorbar(title = "Time (Hours)")
+    plotly::colorbar(title = "Time (Hours)")
   if (density) {
     # Generate local MVN plots
     data.split <- split(data[, 1:3], data$sample_times)
@@ -232,7 +236,7 @@ plot_3d_projection_with_test <- function(object, selected_local_projection, dens
       curr_ellipse <- rgl::ellipse3d(curr_sigma, centre = curr_mean, level = sig_level)
       if (density) {
         fig <- fig %>%
-          add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
+          plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
                     type = 'scatter3d',mode = 'markers', hoverinfo='skip', showlegend = FALSE, inherit = FALSE)
       }
     }
@@ -434,7 +438,8 @@ plot_deviation_cv_original <- function(list_cv) {
 
 display_rhythmicity_results <- function(object, probes_of_interest, info_used = 'ranks', organism) {
   if(missing(probes_of_interest)) probes_of_interest <- c()
-  check_pkg('gprofiler2', bioc = FALSE)
+  check_suggested_pkg('gprofiler2')
+  if (info_used == 'original') check_suggested_pkg('ggrepel')
   if (info_used == 'ranks') {
 
     if(is.null(suppressMessages(gprofiler2::gconvert(rownames(object$Rhythmicity_Results), organism = organism, target = 'ENTREZGENE', mthreshold = 1, filter_na = FALSE)$target))) {Names <- rownames(object$Rhythmicity_Results)}
@@ -451,7 +456,7 @@ display_rhythmicity_results <- function(object, probes_of_interest, info_used = 
                  size=2) +
       geom_text(data = dplyr::filter(aa, Gene %in% probes_of_interest),
                 aes(x = rank_pval, y = rank_rsquared, label = Gene), check_overlap = TRUE)
-    ggplotly(a1)
+    plotly::ggplotly(a1)
   }
   else if (info_used == 'original') {
 
@@ -756,15 +761,19 @@ choose_genes_tt <- function(object, group1, group2, group3, replicate, method = 
     )
     doParallel::registerDoParallel(cl = my.cluster)
 
-    results_df <- foreach(i = 1:length(rownames(data)), .combine = 'rbind', .inorder = TRUE, .packages = c('cosinor2','psych','tidyverse'), .export = c('data','group_vec','time_vec')) %dopar% {
+    results_df <- foreach(i = 1:length(rownames(data)), .combine = 'rbind', .inorder = TRUE, .packages = c('cosinor2','circular','tidyr','dplyr'), .export = c('data','group_vec','time_vec')) %dopar% {
       curr_gene <- rownames(data)[i]
       expression_df <- data.frame(Expression = data[curr_gene,], Time = time_vec, Group = factor(group_vec, levels = unique(group_vec)))
-      expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% tibble::column_to_rownames('Group')
+      expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% as.data.frame(); rownames(expression_df) <- expression_df$Group; expression_df$Group <- NULL
       times <- as.numeric(colnames(expression_df))
 
       pop_cosinor <- population.cosinor.lm(expression_df, times, period = 24, plot = FALSE)
       population_cos_rAMP <- pop_cosinor$coefficients$Amplitude / pop_cosinor$coefficients$MESOR
-      population_cos_Phase <- circadian.mean(unlist(lapply(pop_cosinor$single.cos, function(x) round(-(correct.acrophase(x)) / (2*pi/24),2))))
+      population_cos_Phase <- {
+        phase_hours <- unlist(lapply(pop_cosinor$single.cos, function(x) round(-(correct.acrophase(x)) / (2*pi/24), 2)))
+        phase_rad <- circular::circular(phase_hours * 2 * pi / 24)
+        (as.numeric(circular::mean.circular(phase_rad)) * 24 / (2 * pi)) %% 24
+      }
       population_cos_MESOR <- pop_cosinor$coefficients$MESOR
       population_cos_Phase_lower <- round(pop_cosinor$conf.ints[2,3] / (2*pi/24),2)
       population_rhythm_pval <- cosinor.detect(pop_cosinor)[4]
@@ -789,11 +798,15 @@ choose_genes_tt <- function(object, group1, group2, group3, replicate, method = 
     for (i in 1:length(rownames(data))) {
       curr_gene <- rownames(data)[i]
       expression_df <- data.frame(Expression = data[curr_gene,], Time = time_vec, Group = factor(group_vec, levels = unique(group_vec)))
-      expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% tibble::column_to_rownames('Group')
+      expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% as.data.frame(); rownames(expression_df) <- expression_df$Group; expression_df$Group <- NULL
       times <- as.numeric(colnames(expression_df))
       pop_cosinor <- quiet(population.cosinor.lm(expression_df, times, period = 24, plot = FALSE))
       population_cos_rAMP <- pop_cosinor$coefficients$Amplitude / pop_cosinor$coefficients$MESOR
-      population_cos_Phase <- psych::circadian.mean(unlist(lapply(pop_cosinor$single.cos, function(x) round(-(correct.acrophase(x)) / (2*pi/24),2))))
+      population_cos_Phase <- {
+        phase_hours <- unlist(lapply(pop_cosinor$single.cos, function(x) round(-(correct.acrophase(x)) / (2*pi/24), 2)))
+        phase_rad <- circular::circular(phase_hours * 2 * pi / 24)
+        (as.numeric(circular::mean.circular(phase_rad)) * 24 / (2 * pi)) %% 24
+      }
       population_rhythm_pval <- cosinor.detect(pop_cosinor)[4]
       population_r_squared <- cosinor.PR(pop_cosinor)$`Percent rhythm`
       entrained_results_df[curr_gene ,'Pval'] <- population_rhythm_pval
@@ -801,7 +814,6 @@ choose_genes_tt <- function(object, group1, group2, group3, replicate, method = 
       entrained_results_df[curr_gene ,'rAMP'] <- population_cos_rAMP
       entrained_results_df[curr_gene ,'Rsquared'] <- population_r_squared
 
-      Sys.sleep(0.05)
       setTxtProgressBar(pb, i)
     }
 
@@ -842,7 +854,7 @@ choose_genes_tt <- function(object, group1, group2, group3, replicate, method = 
 #'
 
 geneset_rhythm_info <- function(object, geneset, labels, group1, group2, group3, replicate, method = 'population', pval_cutoff = 0.05) {
-
+  check_suggested_pkg('ggrepel')
   data <- object[["Full_Original_Data"]]
   time_vec <- object[["Metadata"]][["Train"]][["Time"]]
 
@@ -868,7 +880,8 @@ geneset_rhythm_info <- function(object, geneset, labels, group1, group2, group3,
   for (i in 1:length(geneset_present)) {
     curr_gene <- geneset_present[i]
     expression_df <- data.frame(Expression = data[curr_gene,], Time = time_vec, Group = factor(group_vec, levels = unique(group_vec)))
-    expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% tibble::column_to_rownames("Group")
+    expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% as.data.frame()
+    rownames(expression_df) <- expression_df$Group; expression_df$Group <- NULL
     times <- as.numeric(colnames(expression_df))
     pop_cosinor <- quiet(population.cosinor.lm(expression_df, times, period = 24, plot = FALSE))
 
@@ -876,7 +889,6 @@ geneset_rhythm_info <- function(object, geneset, labels, group1, group2, group3,
     ind_array[i, 2, ] <- unname(unlist(purrr::map(pop_cosinor$single.cos, as_mapper(~ .x$coefficients['amp']))))
     ind_array[i, 3, ] <- unname(unlist(purrr::map(pop_cosinor$single.cos, as_mapper(~ cosinor.detect(.x)[4]))))
 
-    Sys.sleep(0.05)
     setTxtProgressBar(pb, i)
   }
   close(pb)
@@ -889,7 +901,7 @@ geneset_rhythm_info <- function(object, geneset, labels, group1, group2, group3,
 
   p1 <- ggplot(results_df %>% dplyr::filter(MESOR > 3), aes(x = Phase, y = rAMP))  +
     geom_point(size = 2.25, aes(color = Sig)) + ggtitle('Geneset Summary Rhythmic Info') + scale_x_continuous(limits = c(0,24), breaks = seq(0,24,by = 2)) +
-    geom_text_repel(data = results_df %>% dplyr::filter(Gene %in% labels, MESOR > 3), aes(label = Gene), box.padding = 0.5, max.overlaps = Inf, size = 2.5) +
+    ggrepel::geom_text_repel(data = results_df %>% dplyr::filter(Gene %in% labels, MESOR > 3), aes(label = Gene), box.padding = 0.5, max.overlaps = Inf, size = 2.5) +
     coord_polar()
 
   print(p1)
@@ -949,7 +961,7 @@ check_cov_interp <- function(object, alpha = 0.95) {
 #'
 
 plot_var_importance <- function(object) {
-  pkgndep::check_pkg('tidytext', bioc = FALSE)
+  check_suggested_pkg('tidytext')
   genes <- object$Metadata$Train$Genes_Used
   proj_names <- names(object$Projections$SVD_Per_Time_Point)
   pc_names <- paste0('PC',1:object$PC_Num)

@@ -22,7 +22,6 @@ calc_train_likelis_dev <- function(object) {
 
     }
     train_likelihood_array[ , ,i] <- mat
-    Sys.sleep(0.01)
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
   }
   object[['Train_Data']][['Train_Likelihood_Array']] <- log(train_likelihood_array)
@@ -102,7 +101,6 @@ calc_test_likelis_dev <- function(object) {
 
     }
     test_likelihood_array[ , ,i] <- mat
-    Sys.sleep(0.01)
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
   }
   names(test_projections) <- names(svd_data)

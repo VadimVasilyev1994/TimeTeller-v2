@@ -7,7 +7,8 @@ normalise_test_data <- function(object, exp_matrix, test_grouping_vars, test_gro
   }
 
   if (norm_method == 'clr') {
-    normalised_mat <- apply(exp_matrix,2,compositions::clr)
+    # Centred log-ratio: log(x) minus mean of log(x) per sample
+    normalised_mat <- apply(exp_matrix, 2, function(x) log(x) - mean(log(x)))
   }
 
   else if(norm_method == 'timecourse') {
@@ -116,7 +117,6 @@ calc_test_likelis <- function(object) {
       }
       test_likelihood_array[,ind_num,i] <- vec
     }
-    Sys.sleep(0.01)
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
   }
   names(test_projections) <- names(svd_data)

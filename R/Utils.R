@@ -91,7 +91,7 @@ quiet <- function(x) {
 }
 
 deviation_cv_corrected <- function(list_cv) {
-  pred_errors <- purrr::map(cv_list, as_mapper(~ .x$Test_Data$Results_df$Pred_Error - median(.x$Test_Data$Results_df$Pred_Error)))
+  pred_errors <- purrr::map(list_cv, as_mapper(~ .x$Test_Data$Results_df$Pred_Error - median(.x$Test_Data$Results_df$Pred_Error)))
   return(unlist(pred_errors))
 }
 
@@ -108,8 +108,19 @@ give_names <- function(vec) {
   return(vec)
 }
 
+## Helper: check that a suggested package is installed before use
+check_suggested_pkg <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(
+      "Package '", pkg, "' is required for this functionality but is not installed.\n",
+      "Install it with: install.packages('", pkg, "')",
+      call. = FALSE
+    )
+  }
+}
+
 prepare_raw_counts <- function(exp_matrix) {
-  check_pkg('edgeR', bioc = TRUE)
+  check_suggested_pkg('edgeR')
   obj_dge <- edgeR::DGEList(counts=as.matrix(exp_matrix))
   keep <- edgeR::filterByExpr(obj_dge)
   obj_dge <- obj_dge[keep, , keep.lib.sizes=FALSE]
@@ -118,7 +129,7 @@ prepare_raw_counts <- function(exp_matrix) {
 }
 
 get_se_obj <- function(object) {
-  check_pkg('SummarizedExperiment', bioc = TRUE)
+  check_suggested_pkg('SummarizedExperiment')
   counts_train <- object$Full_Original_Data
   counts_test <- object$Test_Data$Full_Test_Data
   common_names <- intersect(rownames(counts_train), rownames(counts_test))

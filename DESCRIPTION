@@ -15,34 +15,29 @@ Depends:
 LazyData: true
 Imports: 
     circular,
-    compositions,
     cosinor2,
-    data.table,
     doParallel,
     dplyr,
     foreach,
     ggplot2,
-    ggrepel,
     Matrix,
     mvtnorm,
     parallel,
-    pkgndep,
-    plotly,
     pracma,
-    psych,
     purrr,
     Rfast,
-    rgl,
     splines,
-    tibble,
     tidyr
 Suggests: 
+    ggrepel,
+    gprofiler2,
     knitr,
+    plotly,
+    rgl,
     rmarkdown,
+    rrcov,
     SummarizedExperiment,
     edgeR,
-    rrcov,
-    gprofiler2,
     tidytext
 VignetteBuilder: knitr
 URL: https://github.com/VadimVasilyev1994/TimeTeller, https://vadimvasilyev1994.github.io/TimeTeller/

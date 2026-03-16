@@ -18,7 +18,7 @@ make_data_object <- function(exp_matrix, genes, group_1, group_2, group_3, time,
     timeteller_list[['Full_Original_Data_Raw']] <- as.matrix(exp_matrix)
     timeteller_list[['Full_Original_Data']] <- prepare_raw_counts(exp_matrix)
   }
-  exp_df <- data.table::transpose(as.data.frame(exp_matrix[genes,]))
+  exp_df <- as.data.frame(t(exp_matrix[genes,]))
   colnames(exp_df) <- paste('Gene_', genes, sep='')
   full_df <- exp_df %>% dplyr::mutate(Group = as.character(group_1), Group_2 = as.character(group_2), Group_3 = as.character(group_3), Time = as.factor(time), Replicate = as.character(replicate))
   full_df <- full_df %>% dplyr::mutate_at(c('Group','Group_2','Group_3','Replicate'), ~tidyr::replace_na(.,""))
@@ -26,7 +26,7 @@ make_data_object <- function(exp_matrix, genes, group_1, group_2, group_3, time,
   cat(paste('# Number of genes used:',length(genes), ' (',paste(genes,collapse = ' '),')\n'))
   cat(paste('# Number of Group_1 levels:',length(unique(group_1)), ' (',paste(unique(group_1),collapse = ' '),')\n'))
   cat(paste('# Number of Group_2 levels:',length(unique(group_2)), ' (',paste(unique(group_2),collapse = ' '),')\n'))
-  cat(paste('# Number of Group_2 levels:',length(unique(group_3)), ' (',paste(unique(group_3),collapse = ' '),')\n'))
+  cat(paste('# Number of Group_3 levels:',length(unique(group_3)), ' (',paste(unique(group_3),collapse = ' '),')\n'))
   cat(paste('# Number of Replicate levels:',length(unique(replicate)), ' (',paste(unique(replicate),collapse = ' '),')\n'))
   cat(paste('# Number of unique time points Used for training:',length(unique(time)), ' (',paste(unique(time),collapse = ' '),')\n'))
   timeteller_list[['Train']][['Data']] <- full_df
@@ -101,7 +101,7 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
       dplyr::arrange(Time_mod24)
     object[['Train']][['Normalised_Data']] <- timeseries_norm_df
     object[['Train']][['Normalised_Train_Exp_Data']] <- timeseries_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      data.table::transpose() %>% as.matrix()
+      as.matrix() %>% t()
     return(object)
   }
 
@@ -114,7 +114,7 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
       dplyr::arrange(Time_mod24)
     object[['Train']][['Normalised_Data']] <- intergene_norm_df
     object[['Train']][['Normalised_Train_Exp_Data']] <- intergene_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      data.table::transpose() %>% as.matrix()
+      as.matrix() %>% t()
     return(object)
   }
 
@@ -127,7 +127,7 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
       dplyr::arrange(Time_mod24)
     object[['Train']][['Normalised_Data']] <- clr_norm_df
     object[['Train']][['Normalised_Train_Exp_Data']] <- clr_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      data.table::transpose() %>% as.matrix()
+      as.matrix() %>% t()
     return(object)
   }
 
@@ -139,13 +139,15 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
       dplyr::arrange(Time_mod24)
     object[['Train']][['Normalised_Data']] <- timeseries_norm_df
     object[['Train']][['Normalised_Train_Exp_Data']] <- timeseries_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      data.table::transpose() %>% as.matrix()
+      as.matrix() %>% t()
 
     group_statistics <- data %>% dplyr::group_by(across(all_of(grouping_vars))) %>% dplyr::select(all_of(genes)) %>%
       dplyr::summarise_all(list(Mean = mean,SD = sd)) %>%
       dplyr::rename_at( vars( contains( "Gene_") ), list( ~paste("", gsub("Gene_", "", .), sep = "") ) ) %>%
-      tidyr::unite('timeseries_matched_name', all_of(grouping_vars), remove = FALSE, sep = '|') %>%
-      tibble::column_to_rownames(var = 'timeseries_matched_name')
+      tidyr::unite('timeseries_matched_name', all_of(grouping_vars), remove = FALSE, sep = '|')
+    group_statistics <- as.data.frame(group_statistics)
+    rownames(group_statistics) <- group_statistics$timeseries_matched_name
+    group_statistics$timeseries_matched_name <- NULL
     group_metrics_list <- sapply(c("Mean", "SD"), function(x) group_statistics[endsWith(names(group_statistics),x)], simplify = FALSE)
     object[['Train']][['Gene_Per_Group_Info']] <- group_metrics_list
     return(object)
@@ -166,13 +168,15 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
       dplyr::arrange(Time_mod24)
     object[['Train']][['Normalised_Data']] <- timeseries_norm_df
     object[['Train']][['Normalised_Train_Exp_Data']] <- timeseries_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      data.table::transpose() %>% as.matrix()
+      as.matrix() %>% t()
 
     group_statistics <- intergene_norm_df %>% dplyr::group_by(across(all_of(grouping_vars))) %>% dplyr::select(all_of(new_genes)) %>%
       dplyr::summarise_all(list(Mean = mean,SD = sd)) %>%
       dplyr::rename_at( vars( contains( "Intergene_Gene_") ), list( ~paste("", gsub("Intergene_Gene_", "", .), sep = "") ) ) %>%
-      tidyr::unite('timeseries_matched_name', all_of(grouping_vars), remove = FALSE, sep = '|') %>%
-      tibble::column_to_rownames(var = 'timeseries_matched_name')
+      tidyr::unite('timeseries_matched_name', all_of(grouping_vars), remove = FALSE, sep = '|')
+    group_statistics <- as.data.frame(group_statistics)
+    rownames(group_statistics) <- group_statistics$timeseries_matched_name
+    group_statistics$timeseries_matched_name <- NULL
     group_metrics_list <- sapply(c("Mean", "SD"), function(x) group_statistics[endsWith(names(group_statistics),x)], simplify = FALSE)
     object[['Train']][['Gene_Per_Group_Info']] <- group_metrics_list
     return(object)
@@ -228,7 +232,7 @@ get_mvn_original_data <- function(object, cov_estimate = 'normal', alpha_par = 0
       likeli_array_original[,,i] <- mat_final
     }
     if (cov_estimate == 'robust') {
-      check_pkg("rrcov")
+      check_suggested_pkg("rrcov")
       data.mvnorm <- lapply(data.split, function(x) rrcov::CovMcd(as.matrix(x), alpha = alpha_par, nsamp = 'deterministic'))
       mat <- purrr::map(data.mvnorm, extract_elements_func_robust)
       mat_final <- base::matrix(unlist(mat), nrow = num_PC + num_PC^2)
@@ -354,7 +358,6 @@ calc_train_likelis <- function(object) {
       }
       train_likelihood_array[,ind_num,i] <- vec
     }
-    Sys.sleep(0.01)
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
   }
   object[['Train_Data']][['Train_Likelihood_Array']] <- log(train_likelihood_array)
