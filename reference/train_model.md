@@ -239,7 +239,7 @@ tt_model <- train_model(exp_matrix = bjarn_data$expr_mat, genes = bjarn_data$pro
 #> # Number of genes used: 9  ( 202861_at 205251_at 209750_at 209782_s_at 209824_s_at 210971_s_at 213462_at 221045_s_at 39549_at )
 #> # Number of Group_1 levels: 10  ( Ind_1 Ind_2 Ind_3 Ind_4 Ind_5 Ind_6 Ind_7 Ind_8 Ind_9 Ind_10 )
 #> # Number of Group_2 levels: 1  ( NA )
-#> # Number of Group_2 levels: 1  ( NA )
+#> # Number of Group_3 levels: 1  ( NA )
 #> # Number of Replicate levels: 1  ( NA )
 #> # Number of unique time points Used for training: 6  ( 8 12 16 20 24 28 )
 #> Replicates (if there are any) will be treated as independent observations for the training model

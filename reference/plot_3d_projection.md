@@ -36,7 +36,7 @@ plot_3d_projection(
 
   confidence level when `density = TRUE` and is used to control the size
   of the ellipsoid. This uses
-  [`rgl::ellipse3d`](https://rdrr.io/pkg/rgl/man/ellipse3d.html)
+  [`rgl::ellipse3d`](https://dmurdoch.github.io/rgl/dev/reference/ellipse3d.html)
 
 ## Value
 
