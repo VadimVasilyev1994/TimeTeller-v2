@@ -125,67 +125,9 @@ calc_test_likelis <- function(object) {
   return(object)
 }
 
-get_final_likelis_test <- function(object, log_thresh){
-  likelis_array <- object[['Test_Data']][['Test_Likelihood_Array']]
-  object[['Test_Data']][['LogThresh_Test']] <- log_thresh
-  num_time_points <- dim(likelis_array)[3]
-  for (i in 1:num_time_points) {
-    likelis_array[,,i] <- pmax(likelis_array[,,i], log_thresh)
-  }
-  object[['Test_Data']][['Likelis_Post_Thresh_Test']] <- likelis_array
-  final_averaged_likelis <- apply(likelis_array, c(1,2), mean)
-  object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']] <- final_averaged_likelis
-  max_likelis <- apply(final_averaged_likelis,2,max)
-  object[['Test_Data']][['Max_Likelis_Test']] <- max_likelis
-  return(object)
-}
-
-theta_calc_test <- function(object) {
-  epsilon <- object[['Train_Data']][['epsilon']]
-  eta <- object[['Train_Data']][['eta']]
-  averaged_likelis_rescaled <- t(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])
-  num_samples <- dim(averaged_likelis_rescaled)[1]
-  num_points <- dim(averaged_likelis_rescaled)[2]
-  thetas <- c()
-  for (i in 1:num_samples) {
-    curr_sample <- exp(averaged_likelis_rescaled[i,])
-    curr_lrf_curve <- curr_sample / max(curr_sample)
-    curr_curve <- suppressWarnings(eta*(1 + epsilon + cos(2*pi*((1:num_points)/num_points - which(curr_lrf_curve == max(curr_lrf_curve))/num_points))))
-
-    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points,curr_lrf_curve, period = num_points),seq(1,num_points,length.out = 1000))
-    curve_spline <- stats::predict(splines::periodicSpline(1:num_points,curr_curve, period = num_points),seq(1,num_points,length.out = 1000))
-
-    thetas[i] <- sum(lrf_curve_spline$y > curve_spline$y) / length(lrf_curve_spline$y)
-  }
-  object[['Test_Data']][['Thetas_Test']] <- thetas
-  return(object)
-}
-
-calc_flat_theta_contrib_test <- function(object) {
-  epsilon <- object[['Train_Data']][['epsilon']]
-  eta <- object[['Train_Data']][['eta']]
-  averaged_likelis_rescaled <- t(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])
-  num_samples <- dim(averaged_likelis_rescaled)[1]
-  num_points <- dim(averaged_likelis_rescaled)[2]
-  flat_contribution <- c()
-  theta <- c()
-  for (i in 1:num_samples) {
-    ind_ts <- exp(averaged_likelis_rescaled[i,])
-    ind_ts <- shift_ts(ind_ts, round(num_points/2))
-    ind_lrf_curve <- ind_ts / max(ind_ts)
-
-    curr_curve <- suppressWarnings(eta*(1 + epsilon + cos(2*pi*((1:num_points)/num_points - which(ind_lrf_curve == max(ind_lrf_curve))/num_points))))
-    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points,ind_lrf_curve, period = num_points),seq(1,num_points,length.out = 1000))
-    curve_spline <- stats::predict(splines::periodicSpline(1:num_points,curr_curve, period = num_points),seq(1,num_points,length.out = 1000))
-
-    theta_index <- which(lrf_curve_spline$y > curve_spline$y)
-    flat_regions <- which(abs(diff(lrf_curve_spline$y)) < 1e-4)
-    flat_contribution[i] <- sum(theta_index %in% flat_regions) / length(theta_index) * 100
-  }
-  flat_contribution_df <- data.frame(flat_contributions = flat_contribution, thetas = object[['Test_Data']][['Thetas_Test']])
-  object[['Test_Data']][['Flat_Contrib_to_Theta_df']] <- flat_contribution_df
-  return(object)
-}
+## get_final_likelis_test, theta_calc_test, calc_flat_theta_contrib_test
+## are now unified in Training_functions.R — wrappers preserved there for
+## backward compatibility and call-site compatibility.
 
 second_peaks_fun_test <- function(object, minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
   likelis_array <- object[['Test_Data']][['Test_Likelihood_Array']]

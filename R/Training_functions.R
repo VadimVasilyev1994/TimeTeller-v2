@@ -364,66 +364,192 @@ calc_train_likelis <- function(object) {
   return(object)
 }
 
-get_final_likelis_train <- function(object, log_thresh){
-  likelis_array <- object[['Train_Data']][['Train_Likelihood_Array']]
-  object[['Train_Data']][['LogThresh_Train']] <- log_thresh
-  num_time_points <- dim(likelis_array)[3]
-  for (i in 1:num_time_points) {
+## ---------------------------------------------------------------------------
+## Unified internal functions (train/test share the same computation)
+## ---------------------------------------------------------------------------
+
+#' Apply log threshold and compute averaged likelihoods
+#' @param object TimeTeller list object
+#' @param log_thresh log threshold value
+#' @param mode either 'train' or 'test'
+#' @return Updated object with thresholded and averaged likelihoods
+#' @keywords internal
+get_final_likelis <- function(object, log_thresh, mode = 'train') {
+  # Resolve slot names based on mode
+  if (mode == 'train') {
+    data_slot <- 'Train_Data'
+    likelis_key <- 'Train_Likelihood_Array'
+    thresh_key <- 'LogThresh_Train'
+    post_thresh_key <- 'Likelis_Post_Thresh_Train'
+    avg_key <- 'Averaged_Likelis_Post_Thresh_Train'
+    max_key <- 'Max_Likelis_Train'
+  } else {
+    data_slot <- 'Test_Data'
+    likelis_key <- 'Test_Likelihood_Array'
+    thresh_key <- 'LogThresh_Test'
+    post_thresh_key <- 'Likelis_Post_Thresh_Test'
+    avg_key <- 'Averaged_Likelis_Post_Thresh_Test'
+    max_key <- 'Max_Likelis_Test'
+  }
+
+  likelis_array <- object[[data_slot]][[likelis_key]]
+  object[[data_slot]][[thresh_key]] <- log_thresh
+
+  # Apply floor threshold to each local projection slice
+  for (i in seq_len(dim(likelis_array)[3])) {
     likelis_array[,,i] <- pmax(likelis_array[,,i], log_thresh)
   }
-  object[['Train_Data']][['Likelis_Post_Thresh_Train']] <- likelis_array
+
+  object[[data_slot]][[post_thresh_key]] <- likelis_array
+  # Average across local projections
   final_averaged_likelis <- apply(likelis_array, c(1,2), mean)
-  object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']] <- final_averaged_likelis
-  max_likelis <- apply(final_averaged_likelis,2,max)
-  object[['Train_Data']][['Max_Likelis_Train']] <- max_likelis
+  object[[data_slot]][[avg_key]] <- final_averaged_likelis
+  object[[data_slot]][[max_key]] <- apply(final_averaged_likelis, 2, max)
   return(object)
 }
 
-theta_calc_train <- function(object, epsilon = 0.4, eta = 0.35) {
-  averaged_likelis_rescaled <- t(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])
+# Backward-compatible wrappers
+get_final_likelis_train <- function(object, log_thresh) {
+  get_final_likelis(object, log_thresh, mode = 'train')
+}
+get_final_likelis_test <- function(object, log_thresh) {
+  get_final_likelis(object, log_thresh, mode = 'test')
+}
+
+#' Compute Theta (clock dysfunction metric) for each sample
+#'
+#' Theta measures the proportion of the likelihood curve that exceeds a
+#' cosine envelope, capturing how peaked vs diffuse the likelihood is.
+#' A well-functioning clock produces a sharply peaked likelihood (low Theta);
+#' a disrupted clock produces a broad/flat likelihood (high Theta).
+#'
+#' @param object TimeTeller list object
+#' @param mode either 'train' or 'test'
+#' @param epsilon envelope amplitude parameter (default 0.4)
+#' @param eta envelope scaling parameter (default 0.35)
+#' @return Updated object with Theta values
+#' @keywords internal
+theta_calc <- function(object, mode = 'train', epsilon = NULL, eta = NULL) {
+  if (mode == 'train') {
+    # Training: epsilon and eta are provided as arguments and stored
+    averaged_likelis_rescaled <- t(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])
+  } else {
+    # Testing: retrieve epsilon and eta from the trained model
+    epsilon <- object[['Train_Data']][['epsilon']]
+    eta <- object[['Train_Data']][['eta']]
+    averaged_likelis_rescaled <- t(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])
+  }
+
   num_samples <- dim(averaged_likelis_rescaled)[1]
   num_points <- dim(averaged_likelis_rescaled)[2]
-  thetas <- c()
-  for (i in 1:num_samples) {
+  thetas <- numeric(num_samples)
+
+  for (i in seq_len(num_samples)) {
     curr_sample <- exp(averaged_likelis_rescaled[i,])
     curr_lrf_curve <- curr_sample / max(curr_sample)
-    curr_curve <- suppressWarnings(eta*(1 + epsilon + cos(2*pi*((1:num_points)/num_points - which(curr_lrf_curve == max(curr_lrf_curve))/num_points))))
+    # Cosine envelope centred on the peak of the likelihood response function
+    peak_pos <- which.max(curr_lrf_curve)
+    curr_curve <- suppressWarnings(
+      eta * (1 + epsilon + cos(2 * pi * ((1:num_points) / num_points - peak_pos / num_points)))
+    )
 
-    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points,curr_lrf_curve, period = num_points),seq(1,num_points,length.out = 1000))
-    curve_spline <- stats::predict(splines::periodicSpline(1:num_points,curr_curve, period = num_points),seq(1,num_points,length.out = 1000))
+    lrf_curve_spline <- stats::predict(
+      periodicSpline(1:num_points, curr_lrf_curve, period = num_points),
+      seq(1, num_points, length.out = 1000)
+    )
+    curve_spline <- stats::predict(
+      periodicSpline(1:num_points, curr_curve, period = num_points),
+      seq(1, num_points, length.out = 1000)
+    )
 
+    # Theta = fraction of points where LRF exceeds the envelope
     thetas[i] <- sum(lrf_curve_spline$y > curve_spline$y) / length(lrf_curve_spline$y)
   }
-  object[['Train_Data']][['Thetas_Train']] <- thetas
-  object[['Train_Data']][['epsilon']] <- epsilon
-  object[['Train_Data']][['eta']] <- eta
+
+  if (mode == 'train') {
+    object[['Train_Data']][['Thetas_Train']] <- thetas
+    object[['Train_Data']][['epsilon']] <- epsilon
+    object[['Train_Data']][['eta']] <- eta
+  } else {
+    object[['Test_Data']][['Thetas_Test']] <- thetas
+  }
   return(object)
 }
 
-calc_flat_theta_contrib_train <- function(object) {
-  averaged_likelis_rescaled <- t(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])
-  num_samples <- dim(averaged_likelis_rescaled)[1]
-  num_points <- dim(averaged_likelis_rescaled)[2]
+# Backward-compatible wrappers
+theta_calc_train <- function(object, epsilon = 0.4, eta = 0.35) {
+  theta_calc(object, mode = 'train', epsilon = epsilon, eta = eta)
+}
+theta_calc_test <- function(object) {
+  theta_calc(object, mode = 'test')
+}
+
+#' Compute flat region contribution to Theta
+#'
+#' Quantifies what proportion of Theta is attributable to flat (saturated)
+#' regions in the likelihood curve — i.e. regions clamped at the log threshold.
+#' High flat contribution suggests Theta is inflated by the threshold rather
+#' than genuine clock dysfunction.
+#'
+#' @param object TimeTeller list object
+#' @param mode either 'train' or 'test'
+#' @return Updated object with flat contribution data frame
+#' @keywords internal
+calc_flat_theta_contrib <- function(object, mode = 'train') {
   epsilon <- object[['Train_Data']][['epsilon']]
   eta <- object[['Train_Data']][['eta']]
-  flat_contribution <- c()
-  theta <- c()
-  for (i in 1:num_samples) {
+
+  if (mode == 'train') {
+    averaged_likelis_rescaled <- t(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])
+    thetas_vec <- object[['Train_Data']][['Thetas_Train']]
+  } else {
+    averaged_likelis_rescaled <- t(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])
+    thetas_vec <- object[['Test_Data']][['Thetas_Test']]
+  }
+
+  num_samples <- dim(averaged_likelis_rescaled)[1]
+  num_points <- dim(averaged_likelis_rescaled)[2]
+  flat_contribution <- numeric(num_samples)
+
+  for (i in seq_len(num_samples)) {
     ind_ts <- exp(averaged_likelis_rescaled[i,])
-    ind_ts <- shift_ts(ind_ts, round(num_points/2))
+    ind_ts <- shift_ts(ind_ts, round(num_points / 2))
     ind_lrf_curve <- ind_ts / max(ind_ts)
 
-    curr_curve <- suppressWarnings(eta*(1 + epsilon + cos(2*pi*((1:num_points)/num_points - which(ind_lrf_curve == max(ind_lrf_curve))/num_points))))
-    lrf_curve_spline <- stats::predict(periodicSpline(1:num_points,ind_lrf_curve, period = num_points),seq(1,num_points,length.out = 1000))
-    curve_spline <- stats::predict(periodicSpline(1:num_points,curr_curve, period = num_points),seq(1,num_points,length.out = 1000))
+    peak_pos <- which.max(ind_lrf_curve)
+    curr_curve <- suppressWarnings(
+      eta * (1 + epsilon + cos(2 * pi * ((1:num_points) / num_points - peak_pos / num_points)))
+    )
+    lrf_curve_spline <- stats::predict(
+      periodicSpline(1:num_points, ind_lrf_curve, period = num_points),
+      seq(1, num_points, length.out = 1000)
+    )
+    curve_spline <- stats::predict(
+      periodicSpline(1:num_points, curr_curve, period = num_points),
+      seq(1, num_points, length.out = 1000)
+    )
 
     theta_index <- which(lrf_curve_spline$y > curve_spline$y)
     flat_regions <- which(abs(diff(lrf_curve_spline$y)) < 1e-4)
     flat_contribution[i] <- sum(theta_index %in% flat_regions) / length(theta_index) * 100
   }
-  flat_contribution_df <- data.frame(flat_contributions = flat_contribution, thetas = object[['Train_Data']][['Thetas_Train']])
-  object[['Train_Data']][['Flat_Contrib_to_Theta_df']] <- flat_contribution_df
+
+  flat_contribution_df <- data.frame(flat_contributions = flat_contribution, thetas = thetas_vec)
+
+  if (mode == 'train') {
+    object[['Train_Data']][['Flat_Contrib_to_Theta_df']] <- flat_contribution_df
+  } else {
+    object[['Test_Data']][['Flat_Contrib_to_Theta_df']] <- flat_contribution_df
+  }
   return(object)
+}
+
+# Backward-compatible wrappers
+calc_flat_theta_contrib_train <- function(object) {
+  calc_flat_theta_contrib(object, mode = 'train')
+}
+calc_flat_theta_contrib_test <- function(object) {
+  calc_flat_theta_contrib(object, mode = 'test')
 }
 
 second_peaks_fun_train <- function(object, minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
