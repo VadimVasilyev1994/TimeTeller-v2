@@ -335,33 +335,80 @@ get_mvn_interpolated <- function(object, num_interp_points = 144, interp_method 
   }
 }
 
-calc_train_likelis <- function(object) {
+#' Compute log-likelihood array across all local projections
+#'
+#' For each local SVD projection (one per training time point), project the
+#' expression data and evaluate the multivariate normal density at every
+#' interpolation point. The result is a 3D array:
+#'   (interpolation_points x samples x local_projections)
+#'
+#' @param object TimeTeller list object
+#' @param mode either 'train' or 'test'
+#' @return Updated object with log-likelihood array (and test projections if mode='test')
+#' @keywords internal
+calc_likelis <- function(object, mode = 'train') {
   svd_data <- object[['Projections']][['SVD_Per_Time_Point']]
   fitted_mvn_data <- object[['Projections']][['Fitted_MVN_Interpolated']]
-  train_exp_data <- object[['Train']][['Normalised_Train_Exp_Data']]
   num_PC <- object[['PC_Num']]
-  train_likelihood_array <- base::array(data = NA, dim = c(dim(fitted_mvn_data)[2], dim(train_exp_data)[2], dim(fitted_mvn_data)[3]))
-  for (i in 1:length(names(svd_data))) {
-    project_exp_mat <- svd_data[[i]] %*% train_exp_data
-    for (ind_num in 1:dim(train_exp_data)[2]) {
-      vec <- c()
-      for(j in 1:dim(fitted_mvn_data)[2]) {
-        curr_sigma <- matrix(fitted_mvn_data[(num_PC+1):(num_PC+num_PC^2),j,i], nrow = num_PC)
+
+  # Select expression data based on mode
+  if (mode == 'train') {
+    exp_data <- object[['Train']][['Normalised_Train_Exp_Data']]
+  } else {
+    exp_data <- object[['Test_Data']][['Normalised_Test_Exp_Data']]
+  }
+
+  n_interp <- dim(fitted_mvn_data)[2]
+  n_samples <- dim(exp_data)[2]
+  n_projections <- dim(fitted_mvn_data)[3]
+  likelihood_array <- base::array(data = NA, dim = c(n_interp, n_samples, n_projections))
+
+  # Store test projections for downstream visualisation
+  if (mode == 'test') projections_list <- list()
+
+  for (i in seq_along(names(svd_data))) {
+    project_exp_mat <- svd_data[[i]] %*% exp_data
+    if (mode == 'test') projections_list[[i]] <- project_exp_mat
+
+    for (ind_num in seq_len(n_samples)) {
+      vec <- numeric(n_interp)
+      for (j in seq_len(n_interp)) {
+        # Reconstruct covariance matrix from vectorised storage
+        curr_sigma <- matrix(fitted_mvn_data[(num_PC + 1):(num_PC + num_PC^2), j, i], nrow = num_PC)
+        # Ensure positive-definiteness (interpolation can introduce small negative eigenvalues)
         curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
         if (any(curr_eig < 0)) {
-          sigma_used <- nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE, eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat
+          sigma_used <- nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE,
+                               eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat
         } else {
           sigma_used <- curr_sigma
         }
-
-        vec[j] <- mvtnorm::dmvnorm(project_exp_mat[,ind_num], mean = fitted_mvn_data[1:num_PC,j,i], sigma = sigma_used, checkSymmetry = FALSE)
+        vec[j] <- mvtnorm::dmvnorm(project_exp_mat[, ind_num],
+                                    mean = fitted_mvn_data[1:num_PC, j, i],
+                                    sigma = sigma_used, checkSymmetry = FALSE)
       }
-      train_likelihood_array[,ind_num,i] <- vec
+      likelihood_array[, ind_num, i] <- vec
     }
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
   }
-  object[['Train_Data']][['Train_Likelihood_Array']] <- log(train_likelihood_array)
+
+  # Store results in appropriate slots
+  if (mode == 'train') {
+    object[['Train_Data']][['Train_Likelihood_Array']] <- log(likelihood_array)
+  } else {
+    names(projections_list) <- names(svd_data)
+    object[['Test_Data']][['Test_Projections']] <- projections_list
+    object[['Test_Data']][['Test_Likelihood_Array']] <- log(likelihood_array)
+  }
   return(object)
+}
+
+# Backward-compatible wrappers
+calc_train_likelis <- function(object) {
+  calc_likelis(object, mode = 'train')
+}
+calc_test_likelis <- function(object) {
+  calc_likelis(object, mode = 'test')
 }
 
 ## ---------------------------------------------------------------------------
@@ -552,68 +599,145 @@ calc_flat_theta_contrib_test <- function(object) {
   calc_flat_theta_contrib(object, mode = 'test')
 }
 
-second_peaks_fun_train <- function(object, minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
-  likelis_array <- object[['Train_Data']][['Train_Likelihood_Array']]
-  logthresh <- object[['Train_Data']][['LogThresh_Train']]
-  # Get contribution of flat regions to theta
-  flat_contributions_df <- object[['Train_Data']][['Flat_Contrib_to_Theta_df']]
-  # Looking at averaged Likelihoods after truncation
-  averaged_likelis <- object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']]
-  npoints <- dim(averaged_likelis)[1]
-  peaks_list <- apply(averaged_likelis, 2, pracma::findpeaks, nups = nups, ndowns = ndowns,
-                      sortstr = TRUE, minpeakheight = minpeakheight, minpeakdistance = minpeakdistance, threshold = threshold, npeaks = npeaks, simplify = FALSE)
-  npeaks_list <- purrr::map(peaks_list, ~nrow(.x))
-  npeaks_list[sapply(npeaks_list, is.null)] <- NA
-  npeaks <- unlist(npeaks_list)
-  log_values <- purrr::map(peaks_list, ~.x[,1])
-  log_values[sapply(log_values, is.null)] <- NA
-  times <- purrr::map(peaks_list, ~.x[,2])
-  times[sapply(times, is.null)] <- NA
-  times_hours <- purrr::map(times, ~.x / npoints * 24)
-  times_1st_peak <- (purrr::map_dbl(times_hours, ~.x[1]) + object[['Metadata']][['Train']][['min_T_mod24']]) %% 24
-  times_2nd_peak <- (purrr::map_dbl(times_hours, ~.x[2]) + object[['Metadata']][['Train']][['min_T_mod24']]) %% 24
-  log_likeli_1st_peak <- purrr::map_dbl(log_values, ~.x[1])
-  log_likeli_2nd_peak <- purrr::map_dbl(log_values, ~.x[2])
-  peaks_df <- data.frame(npeaks = npeaks, time_1st_peak = round(times_1st_peak,2), time_2nd_peak = round(times_2nd_peak,2),
-                         max_1st_peak = round(log_likeli_1st_peak,3), max_2nd_peak = round(log_likeli_2nd_peak,3))
-  peaks_df <- peaks_df %>% dplyr::mutate(times_diff = time_1st_peak - time_2nd_peak, max_diff = max_1st_peak - max_2nd_peak)
+#' Extract peak information and build results data frame
+#'
+#' Finds peaks in the averaged likelihood curve, computes prediction statistics
+#' (weighted mean time, circular mean/SD across local projections), and assembles
+#' the full results data frame with metadata.
+#'
+#' @param object TimeTeller list object
+#' @param mode either 'train' or 'test'
+#' @param minpeakheight,minpeakdistance,nups,ndowns,threshold,npeaks passed to pracma::findpeaks
+#' @return Updated object with Results_df in the appropriate data slot
+#' @keywords internal
+second_peaks_fun <- function(object, mode = 'train', minpeakheight = -Inf, minpeakdistance = 1,
+                             nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
 
-  percent_flat <- function(likelis, thresh) {
-    out <- round(sum(likelis == thresh) / npoints * 100,1)
-    return(out)
+  # Resolve slot names
+  if (mode == 'train') {
+    data_slot <- 'Train_Data'
+    likelis_key <- 'Train_Likelihood_Array'
+    thresh_key <- 'LogThresh_Train'
+    avg_key <- 'Averaged_Likelis_Post_Thresh_Train'
+  } else {
+    data_slot <- 'Test_Data'
+    likelis_key <- 'Test_Likelihood_Array'
+    thresh_key <- 'LogThresh_Test'
+    avg_key <- 'Averaged_Likelis_Post_Thresh_Test'
   }
 
-  peaks_df$PercFlat <- apply(averaged_likelis,2,percent_flat, logthresh)
+  likelis_array <- object[[data_slot]][[likelis_key]]
+  logthresh <- object[[data_slot]][[thresh_key]]
+  flat_contributions_df <- object[[data_slot]][['Flat_Contrib_to_Theta_df']]
+  averaged_likelis <- object[[data_slot]][[avg_key]]
+
+  npoints <- dim(averaged_likelis)[1]
+
+  # --- Find peaks in averaged likelihood curves ---
+  peaks_list <- apply(averaged_likelis, 2, pracma::findpeaks, nups = nups, ndowns = ndowns,
+                      sortstr = TRUE, minpeakheight = minpeakheight, minpeakdistance = minpeakdistance,
+                      threshold = threshold, npeaks = npeaks, simplify = FALSE)
+
+  npeaks_list <- map(peaks_list, ~nrow(.x))
+  npeaks_list[sapply(npeaks_list, is.null)] <- NA
+  npeaks_vec <- unlist(npeaks_list)
+
+  log_values <- map(peaks_list, ~.x[,1])
+  log_values[sapply(log_values, is.null)] <- NA
+
+  times <- map(peaks_list, ~.x[,2])
+  times[sapply(times, is.null)] <- NA
+  times_hours <- map(times, ~.x / npoints * 24)
+
+  # Convert peak indices to hours, offset by the minimum training time
+  min_t <- object[['Metadata']][['Train']][['min_T_mod24']]
+  times_1st_peak <- (map_dbl(times_hours, ~.x[1]) + min_t) %% 24
+  times_2nd_peak <- (map_dbl(times_hours, ~.x[2]) + min_t) %% 24
+  log_likeli_1st_peak <- map_dbl(log_values, ~.x[1])
+  log_likeli_2nd_peak <- map_dbl(log_values, ~.x[2])
+
+  peaks_df <- data.frame(
+    npeaks = npeaks_vec,
+    time_1st_peak = round(times_1st_peak, 2),
+    time_2nd_peak = round(times_2nd_peak, 2),
+    max_1st_peak = round(log_likeli_1st_peak, 3),
+    max_2nd_peak = round(log_likeli_2nd_peak, 3)
+  )
+  peaks_df <- peaks_df %>%
+    mutate(times_diff = time_1st_peak - time_2nd_peak,
+           max_diff = max_1st_peak - max_2nd_peak)
+
+  # --- Flat likelihood metrics ---
+  percent_flat <- function(likelis, thresh) {
+    round(sum(likelis == thresh) / npoints * 100, 1)
+  }
+  peaks_df$PercFlat <- apply(averaged_likelis, 2, percent_flat, logthresh)
   peaks_df$FlatContrib <- flat_contributions_df$flat_contributions
   peaks_df$Theta <- flat_contributions_df$thetas
 
-  # Looking at original projections before truncation
+  # --- Per-projection peak statistics (before thresholding) ---
   local_max_vals <- apply(likelis_array, c(2,3), max)
-  peaks_df <- peaks_df %>% dplyr::mutate(local_smallest_peak = round(apply(local_max_vals,1,min),3), local_biggest_peak = round(apply(local_max_vals,1,max),3),
-                                         local_mean = round(apply(local_max_vals,1,mean),3), local_sd = round(apply(local_max_vals,1,sd),3))
+  peaks_df <- peaks_df %>%
+    mutate(local_smallest_peak = round(apply(local_max_vals, 1, min), 3),
+           local_biggest_peak = round(apply(local_max_vals, 1, max), 3),
+           local_mean = round(apply(local_max_vals, 1, mean), 3),
+           local_sd = round(apply(local_max_vals, 1, sd), 3))
 
-  local_times <- (apply(likelis_array, c(2,3), which.max) / npoints * 24 + object[['Metadata']][['Train']][['min_T_mod24']]) %% 24
-  time_weights <- t(apply(local_max_vals, 1, function(x)(x-min(x))/(max(x)-min(x))))
+  local_times <- (apply(likelis_array, c(2,3), which.max) / npoints * 24 + min_t) %% 24
+  time_weights <- t(apply(local_max_vals, 1, function(x) (x - min(x)) / (max(x) - min(x))))
 
-  # Weighted average time prediction using max likelihoods values
-  weighted_times_vec <- apply(sweep(local_times*time_weights, 1, apply(time_weights,1,sum), '/'),1,sum)
+  # Weighted average time prediction using max likelihood values
+  weighted_times_vec <- apply(sweep(local_times * time_weights, 1, apply(time_weights, 1, sum), '/'), 1, sum)
 
+  # Circular mean and deviation of local time predictions
   local_times_rad <- local_times / 24 * 2 * pi
   mean_local_times <- (24 + suppressWarnings(apply(local_times_rad, 1, circular::mean.circular)) * 24 / 2 / pi) %% 24
   sd_local_times <- suppressWarnings(apply(local_times_rad, 1, circular::meandeviation)) * 24 / 2 / pi
-  peaks_df <- peaks_df %>% dplyr::mutate(mean_time_pred = round(mean_local_times,2), sd_time_pred = round(sd_local_times,2),
-                                         min_time_pred = round(apply(local_times,1,min),2), max_time_pred = round(apply(local_times,1,max),2),
-                                         weighted_mean_time_pred = round(weighted_times_vec,2)) %>%
-    dplyr::mutate(time_pred_diff = time_1st_peak - weighted_mean_time_pred)
 
-  peaks_df$Actual_Time <- object$Train$Normalised_Data$Time_mod24
-  peaks_df$Pred_Error <- circular_difference(peaks_df$time_1st_peak, peaks_df$Actual_Time)
-  peaks_df$Group <- object$Train$Normalised_Data$Group
-  peaks_df$Group_2 <- object$Train$Normalised_Data$Group_2
-  peaks_df$Group_3 <- object$Train$Normalised_Data$Group_3
-  peaks_df$Replicate <- object$Train$Normalised_Data$Replicate
+  peaks_df <- peaks_df %>%
+    mutate(mean_time_pred = round(mean_local_times, 2),
+           sd_time_pred = round(sd_local_times, 2),
+           min_time_pred = round(apply(local_times, 1, min), 2),
+           max_time_pred = round(apply(local_times, 1, max), 2),
+           weighted_mean_time_pred = round(weighted_times_vec, 2)) %>%
+    mutate(time_pred_diff = time_1st_peak - weighted_mean_time_pred)
 
-  object[['Train_Data']][['Results_df']] <- peaks_df
+  # --- Attach metadata and compute prediction error ---
+  if (mode == 'test') {
+    # Fallback: if no peaks found above threshold, use weighted mean of local predictions
+    peaks_df$time_1st_peak <- ifelse(is.na(peaks_df$time_1st_peak),
+                                     peaks_df$weighted_mean_time_pred,
+                                     peaks_df$time_1st_peak)
+    peaks_df$Actual_Time <- as.numeric(object[['Metadata']][['Test']][['Time']]) %% 24
+    peaks_df$Pred_Error <- circular_difference(peaks_df$time_1st_peak, peaks_df$Actual_Time)
+    peaks_df <- peaks_df %>%
+      mutate(Group_1 = object[['Metadata']][['Test']][['Group_1']],
+             Group_2 = object[['Metadata']][['Test']][['Group_2']],
+             Group_3 = object[['Metadata']][['Test']][['Group_3']],
+             Replicate = object[['Metadata']][['Test']][['Replicate']])
+  } else {
+    peaks_df$Actual_Time <- object$Train$Normalised_Data$Time_mod24
+    peaks_df$Pred_Error <- circular_difference(peaks_df$time_1st_peak, peaks_df$Actual_Time)
+    peaks_df$Group <- object$Train$Normalised_Data$Group
+    peaks_df$Group_2 <- object$Train$Normalised_Data$Group_2
+    peaks_df$Group_3 <- object$Train$Normalised_Data$Group_3
+    peaks_df$Replicate <- object$Train$Normalised_Data$Replicate
+  }
 
+  object[[data_slot]][['Results_df']] <- peaks_df
   return(object)
+}
+
+# Backward-compatible wrappers
+second_peaks_fun_train <- function(object, minpeakheight = -Inf, minpeakdistance = 1,
+                                   nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
+  second_peaks_fun(object, mode = 'train', minpeakheight = minpeakheight,
+                   minpeakdistance = minpeakdistance, nups = nups, ndowns = ndowns,
+                   threshold = threshold, npeaks = npeaks)
+}
+second_peaks_fun_test <- function(object, minpeakheight = -Inf, minpeakdistance = 1,
+                                  nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
+  second_peaks_fun(object, mode = 'test', minpeakheight = minpeakheight,
+                   minpeakdistance = minpeakdistance, nups = nups, ndowns = ndowns,
+                   threshold = threshold, npeaks = npeaks)
 }
