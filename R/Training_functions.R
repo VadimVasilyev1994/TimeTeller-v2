@@ -293,7 +293,7 @@ get_mvn_interpolated <- function(object, num_interp_points = 144, interp_method 
         for (k in 1:length(interp_points)) {
           first_term <- pracma::sqrtm(cov_mat_1)$B
           second_term <- solve(pracma::sqrtm(cov_mat_1)$B) %*% cov_mat_2 %*% solve(pracma::sqrtm(cov_mat_1)$B)
-          second_term <- expm(logm(second_term) * interp_points[k])
+          second_term <- expm::expm(expm::logm(second_term) * interp_points[k])
           third_term <- pracma::sqrtm(cov_mat_1)$B
 
           interp_mat <- first_term %*% second_term %*% third_term

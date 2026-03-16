@@ -161,7 +161,7 @@ plot_3d_projection <- function(object, selected_local_projection, density = FALS
       }
     }
   }
-  fig <- fig %>% layout(title = paste(title,projection_name), scene = list(bgcolor = "#e5ecf6"))
+  fig <- fig %>% plotly::layout(title = paste(title,projection_name), scene = list(bgcolor = "#e5ecf6"))
   return(fig)
 
 }
@@ -241,7 +241,7 @@ plot_3d_projection_with_test <- function(object, selected_local_projection, dens
       }
     }
   }
-  fig <- fig %>% layout(title = paste(title,projection_name), scene = list(bgcolor = "#e5ecf6"))
+  fig <- fig %>% plotly::layout(title = paste(title,projection_name), scene = list(bgcolor = "#e5ecf6"))
   return(fig)
 
 }
@@ -841,6 +841,7 @@ choose_genes_tt <- function(object, group1, group2, group3, replicate, method = 
 #' @param group3 if only a subset of Group_3 (Metadata provided) should be used
 #' @param replicate if only a subset of Replicate (Metadata provided) should be used
 #' @param method method used for rhythmicity analysis. Default is \code{'population'} as in \url{https://tbiomed.biomedcentral.com/articles/10.1186/1742-4682-11-16}
+#' @param pval_cutoff adjusted p-value threshold for classifying genes as rhythmic. Default is 0.05
 #'
 #' @author Vadim Vasilyev
 #'
