@@ -1,0 +1,34 @@
+# TimeTeller
+
+TimeTeller is the machine learning tool that analyses the local
+circadian clock as a system. It aims to estimate the circadian clock
+phase and the level of dysfunction from a single sample by modelling the
+multi-dimensional state of the clock.
+
+## Installation
+
+You can install the development version of TimeTeller from
+[GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("VadimVasilyev1994/TimeTeller")
+```
+
+## Information
+
+This is a basic example which shows you how to solve a common problem:
+
+``` r
+# load the package
+library(TimeTeller)
+
+# function help
+help(train_model)
+
+# info about data included in the package
+help(panda_data)
+```
+
+Examples and documentation available at
+[TimeTeller](https://vadimvasilyev1994.github.io/TimeTeller/).
