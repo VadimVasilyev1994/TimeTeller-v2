@@ -6,12 +6,10 @@ Set of tools and visualisations for interrogating the circadian clock
 
 Useful links:
 
-- <https://github.com/VadimVasilyev1994/TimeTeller>
-
-- <https://vadimvasilyev1994.github.io/TimeTeller/>
+- <https://github.com/VadimVasilyev1994/TimeTeller-v2>
 
 - Report bugs at
-  <https://github.com/VadimVasilyev1994/TimeTeller/issues>
+  <https://github.com/VadimVasilyev1994/TimeTeller-v2/issues>
 
 ## Author
 

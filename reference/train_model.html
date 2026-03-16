@@ -22,7 +22,7 @@
   </ul></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/VadimVasilyev1994/TimeTeller/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/VadimVasilyev1994/TimeTeller-v2/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul></div>
 
 
@@ -32,7 +32,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Train the TimeTeller model</h1>
-      <small class="dont-index">Source: <a href="https://github.com/VadimVasilyev1994/TimeTeller/blob/master/R/Main_functions.R" class="external-link"><code>R/Main_functions.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/VadimVasilyev1994/TimeTeller-v2/blob/master/R/Main_functions.R" class="external-link"><code>R/Main_functions.R</code></a></small>
       <div class="d-none name"><code>train_model.Rd</code></div>
     </div>
 
@@ -211,7 +211,7 @@
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://github.com/VadimVasilyev1994/TimeTeller" class="external-link">"TimeTeller"</a></span><span class="op">)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="st"><a href="https://github.com/VadimVasilyev1994/TimeTeller-v2" class="external-link">"TimeTeller"</a></span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">tt_model</span> <span class="op">&lt;-</span> <span class="fu">train_model</span><span class="op">(</span>exp_matrix <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">expr_mat</span>, genes <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">probes_used</span>,</span></span>
 <span class="r-in"><span>                        group_1 <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">group</span>, time <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">time</span>, log_thresh <span class="op">=</span> <span class="op">-</span><span class="fl">5</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Please check the information provided:</span>

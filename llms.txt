@@ -12,7 +12,7 @@ You can install the development version of TimeTeller from
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("VadimVasilyev1994/TimeTeller")
+devtools::install_github("VadimVasilyev1994/TimeTeller-v2")
 ```
 
 ## Information
