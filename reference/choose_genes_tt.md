@@ -1,6 +1,9 @@
 # Rhythmicity analysis of training data
 
-Calculates rhythmicity results for the training data
+Calculates population cosinor rhythmicity results for the training data,
+including phase consistency (MRL) and amplitude reliability (CV of
+rAMP). Genes are ranked by a weighted composite of p-value, R-squared,
+MRL, and amplitude CV.
 
 ## Usage
 
@@ -13,7 +16,8 @@ choose_genes_tt(
   replicate,
   method = "population",
   parallel = TRUE,
-  cores = 4
+  cores = 6,
+  rank_weights = c(pval = 1, rsquared = 1, mrl = 1, amp_cv = 1)
 )
 ```
 
@@ -21,8 +25,7 @@ choose_genes_tt(
 
 - object:
 
-  list containing TimeTeller training and test models following
-  `train_model` and `test_model` respectively
+  list containing TimeTeller training model following `train_model`
 
 - group1:
 
@@ -53,12 +56,16 @@ choose_genes_tt(
 - cores:
 
   if using parallel computation, how many cores should be used. Default
-  is 4
+  is 6
+
+- rank_weights:
+
+  named numeric vector of weights for composite ranking. Names must be
+  `pval`, `rsquared`, `mrl`, `amp_cv`. Default is equal weighting.
 
 ## Value
 
-Returns plots of theta calculation curves produced using standard
-[`graphics::plot`](https://rdrr.io/r/graphics/plot.default.html)
+Returns the updated object with `Rhythmicity_Results` data frame
 
 ## References
 
