@@ -2,43 +2,8 @@
 
 ``` r
 library(TimeTeller)
-#> Warning: replacing previous import 'Matrix::image' by 'graphics::image' when
+#> Warning: replacing previous import 'stats::filter' by 'dplyr::filter' when
 #> loading 'TimeTeller'
-#> Warning: replacing previous import 'graphics::layout' by 'plotly::layout' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'ggplot2::last_plot' by 'plotly::last_plot'
-#> when loading 'TimeTeller'
-#> Warning: replacing previous import 'ggplot2::%+%' by 'psych::%+%' when loading
-#> 'TimeTeller'
-#> Warning: replacing previous import 'ggplot2::alpha' by 'psych::alpha' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'foreach::when' by 'purrr::when' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'foreach::accumulate' by 'purrr::accumulate'
-#> when loading 'TimeTeller'
-#> Warning in rgl.init(initValue, onlyNULL): RGL: unable to open X11 display
-#> Warning: 'rgl.init' failed, will use the null device.
-#> See '?rgl.useNULL' for ways to avoid this warning.
-#> Warning: replacing previous import 'Matrix::cov2cor' by 'stats::cov2cor' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'dplyr::lag' by 'stats::lag' when loading
-#> 'TimeTeller'
-#> Warning: replacing previous import 'plotly::filter' by 'stats::filter' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'Matrix::toeplitz' by 'stats::toeplitz' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'circular::var' by 'stats::var' when loading
-#> 'TimeTeller'
-#> Warning: replacing previous import 'circular::sd' by 'stats::sd' when loading
-#> 'TimeTeller'
-#> Warning: replacing previous import 'Matrix::update' by 'stats::update' when
-#> loading 'TimeTeller'
-#> Warning: replacing previous import 'Matrix::tail' by 'utils::tail' when loading
-#> 'TimeTeller'
-#> Warning: replacing previous import 'Matrix::head' by 'utils::head' when loading
-#> 'TimeTeller'
-#> Warning: replacing previous import 'purrr::transpose' by
-#> 'data.table::transpose' when loading 'TimeTeller'
 ```
 
 ## Brief Introduction

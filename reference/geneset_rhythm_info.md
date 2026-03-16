@@ -14,7 +14,8 @@ geneset_rhythm_info(
   group2,
   group3,
   replicate,
-  method = "population"
+  method = "population",
+  pval_cutoff = 0.05
 )
 ```
 
@@ -53,6 +54,11 @@ geneset_rhythm_info(
 
   method used for rhythmicity analysis. Default is `'population'` as in
   <https://tbiomed.biomedcentral.com/articles/10.1186/1742-4682-11-16>
+
+- pval_cutoff:
+
+  adjusted p-value threshold for classifying genes as rhythmic. Default
+  is 0.05
 
 ## Value
 
