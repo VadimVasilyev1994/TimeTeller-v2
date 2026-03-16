@@ -7,6 +7,7 @@
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/index.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/TimeTeller.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/bjarn_data.html</loc></url>
+<url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/calc_flat_theta_contrib.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/check_cov_interp.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/choose_genes_tt.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/choose_logthresh.html</loc></url>
@@ -14,6 +15,7 @@
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/display_rhythmicity_results.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/exprs_vs_PredTime_plot.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/geneset_rhythm_info.html</loc></url>
+<url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/get_final_likelis.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/index.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/panda_data.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/plotPCs_test.html</loc></url>
@@ -30,6 +32,7 @@
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/plot_var_importance.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/shift_outlier_times.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/test_model.html</loc></url>
+<url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/theta_calc.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/train_cv.html</loc></url>
 <url><loc>https://vadimvasilyev1994.github.io/TimeTeller/reference/train_model.html</loc></url>
 </urlset>
