@@ -57,7 +57,7 @@
 #' @importFrom foreach foreach %dopar% %do%
 #' @importFrom doParallel registerDoParallel
 #' @importFrom splines periodicSpline
-#' @importFrom circular mean.circular meandeviation circular
+#' @importFrom circular mean.circular meandeviation circular rayleigh.test
 #' @importFrom mvtnorm dmvnorm
 #' @importFrom cosinor2 population.cosinor.lm correct.acrophase cosinor.detect cosinor.PR
 #' @importFrom Rfast mvnorm.mle

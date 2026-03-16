@@ -64,16 +64,30 @@ circular_difference <- function(time_1, time_2) {
   return(diff_hours)
 }
 
+# Subset sample indices by optional group filters.
+# Returns the intersection of indices matching each non-NULL filter.
+get_group_indices <- function(object, group1 = NULL, group2 = NULL, group3 = NULL, replicate = NULL) {
+  n <- ncol(object[['Full_Original_Data']])
+  meta <- object[['Metadata']][['Train']]
+  idx_gr1 <- if (is.null(group1)) seq_len(n) else which(meta[['Group_1']] %in% group1)
+  idx_gr2 <- if (is.null(group2)) seq_len(n) else which(meta[['Group_2']] %in% group2)
+  idx_gr3 <- if (is.null(group3)) seq_len(n) else which(meta[['Group_3']] %in% group3)
+  idx_rep <- if (is.null(replicate)) seq_len(n) else which(meta[['Replicate']] %in% replicate)
+  Reduce(intersect, list(idx_gr1, idx_gr2, idx_gr3, idx_rep))
+}
+
+# Build a group label vector by pasting all metadata fields
+build_group_vec <- function(object, index_used) {
+  meta <- object[['Metadata']][['Train']]
+  paste(meta[['Group_1']], meta[['Group_2']], meta[['Group_3']], meta[['Replicate']], sep = '_')[index_used]
+}
+
+# Circular shift: move the peak of ts to target_peak position
 shift_ts <- function(ts, target_peak) {
-  obs_num <- length(ts)
-  max_ind <- which.max(ts)
-  extended_ts <- c(ts,ts,ts)
-  shift_dist <- target_peak - max_ind
-  new_ts <- c()
-  for (i in 1:obs_num) {
-    new_ts[i] <- extended_ts[i+obs_num-shift_dist]
-  }
-  return(new_ts)
+  n <- length(ts)
+  shift_dist <- target_peak - which.max(ts)
+  indices <- ((seq_len(n) - 1 - shift_dist) %% n) + 1
+  ts[indices]
 }
 
 extract_elements_func <- function(data) {

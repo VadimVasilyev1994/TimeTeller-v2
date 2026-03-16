@@ -6,4 +6,6 @@ utils::globalVariables(c("Actual_Time", "Clock_Status", "Corrected_Time", "Datas
                          "max_1st_peak", "max_2nd_peak", "rank_pval", "rank_rsquared", "rank_sum",
                          "test_timeseries_matched_name", "time_1st_peak", "time_2nd_peak",
                          "timeseries_ind", "timeseries_name", "weighted_mean_time_pred", "name", "value",
-                         "Pval.adj", "MESOR", "Phase", "rAMP", "Sig"))
+                         "Pval.adj", "MESOR", "Phase", "rAMP", "Sig",
+                         "MRL", "Rayleigh_p", "Amp_CV", "n_groups", "occurrence",
+                         "rank_mrl", "rank_amp_cv", "n_tp"))

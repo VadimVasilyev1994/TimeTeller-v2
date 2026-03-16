@@ -12,11 +12,12 @@ choose_genes_tt(
   replicate,
   method = "population",
   parallel = TRUE,
-  cores = 4
+  cores = 6,
+  rank_weights = c(pval = 1, rsquared = 1, mrl = 1, amp_cv = 1)
 )
 }
 \arguments{
-\item{object}{list containing TimeTeller training and test models following \code{train_model} and \code{test_model} respectively}
+\item{object}{list containing TimeTeller training model following \code{train_model}}
 
 \item{group1}{if only a subset of Group_1 (Metadata provided) should be used}
 
@@ -30,13 +31,18 @@ choose_genes_tt(
 
 \item{parallel}{if TRUE, parallel computation using \code{foreach} and \code{doParallel} packages will be used. Default is TRUE}
 
-\item{cores}{if using parallel computation, how many cores should be used. Default is 4}
+\item{cores}{if using parallel computation, how many cores should be used. Default is 6}
+
+\item{rank_weights}{named numeric vector of weights for composite ranking. Names must be \code{pval}, \code{rsquared}, \code{mrl}, \code{amp_cv}. Default is equal weighting.}
 }
 \value{
-Returns plots of theta calculation curves produced using standard \code{graphics::plot}
+Returns the updated object with \code{Rhythmicity_Results} data frame
 }
 \description{
-Calculates rhythmicity results for the training data
+Calculates population cosinor rhythmicity results for the training data,
+including phase consistency (MRL) and amplitude reliability (CV of rAMP).
+Genes are ranked by a weighted composite of p-value, R-squared, MRL,
+and amplitude CV.
 }
 \references{
 Cornelissen, G., 2014. Cosinor-based rhythmometry. Theoretical Biology and Medical Modelling, 11(1), pp.1-24.

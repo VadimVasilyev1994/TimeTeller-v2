@@ -712,16 +712,20 @@ plot_ind_curve <- function(object, sample_num, logthresh, train_or_test = 'test'
 
 #' Rhythmicity analysis of training data
 #'
-#' Calculates rhythmicity results for the training data
+#' Calculates population cosinor rhythmicity results for the training data,
+#' including phase consistency (MRL) and amplitude reliability (CV of rAMP).
+#' Genes are ranked by a weighted composite of p-value, R-squared, MRL,
+#' and amplitude CV.
 #'
-#' @param object list containing TimeTeller training and test models following \code{train_model} and \code{test_model} respectively
+#' @param object list containing TimeTeller training model following \code{train_model}
 #' @param group1 if only a subset of Group_1 (Metadata provided) should be used
 #' @param group2 if only a subset of Group_2 (Metadata provided) should be used
 #' @param group3 if only a subset of Group_3 (Metadata provided) should be used
 #' @param replicate if only a subset of Replicate (Metadata provided) should be used
 #' @param method method used for rhythmicity analysis. Default is \code{'population'} as in \url{https://tbiomed.biomedcentral.com/articles/10.1186/1742-4682-11-16}
 #' @param parallel if TRUE, parallel computation using \code{foreach} and \code{doParallel} packages will be used. Default is TRUE
-#' @param cores if using parallel computation, how many cores should be used. Default is 4
+#' @param cores if using parallel computation, how many cores should be used. Default is 6
+#' @param rank_weights named numeric vector of weights for composite ranking. Names must be \code{pval}, \code{rsquared}, \code{mrl}, \code{amp_cv}. Default is equal weighting.
 #'
 #' @author Vadim Vasilyev
 #'
@@ -729,104 +733,270 @@ plot_ind_curve <- function(object, sample_num, logthresh, train_or_test = 'test'
 #'
 #' Cornelissen, G., 2014. Cosinor-based rhythmometry. Theoretical Biology and Medical Modelling, 11(1), pp.1-24.
 #'
-#' @return Returns plots of theta calculation curves produced using standard \code{graphics::plot}
+#' @return Returns the updated object with \code{Rhythmicity_Results} data frame
 #' @export
 #'
 
-choose_genes_tt <- function(object, group1, group2, group3, replicate, method = 'population', parallel = TRUE, cores = 4){
+choose_genes_tt <- function(object,
+                            group1,
+                            group2,
+                            group3,
+                            replicate,
+                            method       = 'population',
+                            parallel     = TRUE,
+                            cores        = 6,
+                            rank_weights = c(pval     = 1,
+                                             rsquared = 1,
+                                             mrl      = 1,
+                                             amp_cv   = 1)) {
 
-  data <- object[['Full_Original_Data']]
+  # ── 0. Extract and subset data ─────────────────────────────────────────
+
+  data     <- object[['Full_Original_Data']]
   time_vec <- object[['Metadata']][['Train']][['Time']]
-  entrained_results_df <- data.frame(Pval = rep(NA,length(rownames(data))), Phase = rep(NA,length(rownames(data))),
-                                     rAMP = rep(NA,length(rownames(data))), Rsquared = rep(NA,length(rownames(data))))
-  rownames(entrained_results_df) <- rownames(data)
 
-
-  if (missing(group1)) {index_gr1 <- 1:dim(data)[2]} else {index_gr1 <- which(object[['Metadata']][['Train']][['Group_1']] %in% group1)}
-  if (missing(group2)) {index_gr2 <- 1:dim(data)[2]} else {index_gr2 <- which(object[['Metadata']][['Train']][['Group_2']] %in% group2)}
-  if (missing(group3)) {index_gr3 <- 1:dim(data)[2]} else {index_gr3 <- which(object[['Metadata']][['Train']][['Group_3']] %in% group3)}
-  if (missing(replicate)) {index_rep <- 1:dim(data)[2]} else {index_rep <- which(object[['Metadata']][['Train']][['Replicate']] %in% replicate)}
+  if (missing(group1))    { index_gr1 <- seq_len(ncol(data)) } else { index_gr1 <- which(object[['Metadata']][['Train']][['Group_1']] %in% group1) }
+  if (missing(group2))    { index_gr2 <- seq_len(ncol(data)) } else { index_gr2 <- which(object[['Metadata']][['Train']][['Group_2']] %in% group2) }
+  if (missing(group3))    { index_gr3 <- seq_len(ncol(data)) } else { index_gr3 <- which(object[['Metadata']][['Train']][['Group_3']] %in% group3) }
+  if (missing(replicate)) { index_rep <- seq_len(ncol(data)) } else { index_rep <- which(object[['Metadata']][['Train']][['Replicate']] %in% replicate) }
 
   index_used <- Reduce(intersect, list(index_gr1, index_gr2, index_gr3, index_rep))
-  data <- data[ ,index_used]
+  data     <- data[, index_used]
   time_vec <- time_vec[index_used]
-  group_vec <- paste(paste(object[["Metadata"]][["Train"]][["Group_1"]], object[["Metadata"]][["Train"]][["Group_2"]],
-                           object[["Metadata"]][["Train"]][["Group_3"]], object[["Metadata"]][["Train"]][["Replicate"]], sep = '_'))[index_used]
+
+  group_vec <- paste(
+    object[["Metadata"]][["Train"]][["Group_1"]][index_used],
+    object[["Metadata"]][["Train"]][["Group_2"]][index_used],
+    object[["Metadata"]][["Train"]][["Group_3"]][index_used],
+    object[["Metadata"]][["Train"]][["Replicate"]][index_used],
+    sep = '_'
+  )
+
+  n_genes <- nrow(data)
+  cat("Analysing", n_genes, "genes across", length(unique(group_vec)), "groups\n")
 
 
-  if (parallel == TRUE) {
-    my.cluster <- parallel::makeCluster(
-      cores,
-      type = "PSOCK"
+  # ── Helper: prepare wide-format df for population.cosinor.lm ───────────
+  #    Handles mod-24 duplicate timepoints by cycle-splitting, and drops
+  #    groups with too few timepoints.
+
+  MIN_TIMEPOINTS <- 4L
+
+  prepare_expression_df <- function(gene_name) {
+    df <- data.frame(
+      Expression = data[gene_name, ],
+      Time       = time_vec,
+      Group      = factor(group_vec, levels = unique(group_vec))
     )
-    doParallel::registerDoParallel(cl = my.cluster)
 
-    results_df <- foreach(i = 1:length(rownames(data)), .combine = 'rbind', .inorder = TRUE, .packages = c('cosinor2','circular','tidyr','dplyr'), .export = c('data','group_vec','time_vec')) %dopar% {
-      curr_gene <- rownames(data)[i]
-      expression_df <- data.frame(Expression = data[curr_gene,], Time = time_vec, Group = factor(group_vec, levels = unique(group_vec)))
-      expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% as.data.frame(); rownames(expression_df) <- expression_df$Group; expression_df$Group <- NULL
-      times <- as.numeric(colnames(expression_df))
+    # Disambiguate duplicate Group x Time (mod 24 collisions)
+    df <- df %>%
+      group_by(Group, Time) %>%
+      mutate(occurrence = row_number()) %>%
+      ungroup() %>%
+      mutate(Group = if_else(
+        occurrence > 1L,
+        paste0(as.character(Group), "_cycle", occurrence),
+        as.character(Group)
+      )) %>%
+      select(-occurrence)
 
-      pop_cosinor <- population.cosinor.lm(expression_df, times, period = 24, plot = FALSE)
-      population_cos_rAMP <- pop_cosinor$coefficients$Amplitude / pop_cosinor$coefficients$MESOR
-      population_cos_Phase <- {
-        phase_hours <- unlist(lapply(pop_cosinor$single.cos, function(x) round(-(correct.acrophase(x)) / (2*pi/24), 2)))
-        phase_rad <- circular::circular(phase_hours * 2 * pi / 24)
-        (as.numeric(circular::mean.circular(phase_rad)) * 24 / (2 * pi)) %% 24
-      }
-      population_cos_MESOR <- pop_cosinor$coefficients$MESOR
-      population_cos_Phase_lower <- round(pop_cosinor$conf.ints[2,3] / (2*pi/24),2)
-      population_rhythm_pval <- cosinor.detect(pop_cosinor)[4]
-      population_r_squared <- cosinor.PR(pop_cosinor)$`Percent rhythm`
+    # Drop groups with too few unique timepoints
+    group_tp_counts <- df %>%
+      group_by(Group) %>%
+      summarise(n_tp = dplyr::n_distinct(Time), .groups = "drop")
 
-      data.frame(Pval = population_rhythm_pval, Phase = population_cos_Phase,
-                 MESOR = population_cos_MESOR, rAMP = population_cos_rAMP, Rsquared = population_r_squared)
+    keep_groups <- group_tp_counts$Group[group_tp_counts$n_tp >= MIN_TIMEPOINTS]
 
+    if (length(keep_groups) < 2) {
+      return(NULL)  # Need at least 2 individuals for population cosinor
     }
 
-    rownames(results_df) <- rownames(data)
-    results_df$Pval.adj <- round(stats::p.adjust(results_df$Pval, "BH"), 3)
-    results_df$Gene <- rownames(results_df)
-    results_df <- results_df %>% dplyr::mutate(rank_pval = base::rank(Pval, ties.method = 'random'),
-                                               rank_rsquared = base::rank(-Rsquared, ties.method = 'random')) %>%
-      dplyr::mutate(rank_sum = rank_pval + rank_rsquared)
-    object[['Rhythmicity_Results']] <- results_df
-    return(object)
+    df <- df %>% filter(Group %in% keep_groups)
+    df$Group <- factor(df$Group, levels = unique(df$Group))
+
+    # Pivot to wide format (groups x timepoints)
+    wide <- df %>%
+      tidyr::pivot_wider(names_from = Time, values_from = Expression) %>%
+      as.data.frame()
+    rownames(wide) <- wide$Group
+    wide$Group <- NULL
+
+    return(wide)
+  }
+
+
+  # ── Helper: extract per-group metrics from population cosinor ──────────
+
+  extract_group_metrics <- function(pop_cosinor) {
+    single_fits <- pop_cosinor$single.cos
+
+    # Per-group acrophases (in hours, corrected via correct.acrophase)
+    acrophases_h <- unlist(lapply(single_fits, function(x) {
+      -(cosinor2::correct.acrophase(x)) / (2 * pi / 24)
+    }))
+
+    # Per-group amplitudes and mesors
+    amplitudes <- unlist(lapply(single_fits, function(x) unname(x$coefficients[2])))
+    mesors     <- unlist(lapply(single_fits, function(x) unname(x$coefficients[1])))
+    ramps      <- unlist(lapply(single_fits, function(x) unname(x$coefficients[2] / x$coefficients[1])))
+
+    list(acrophases_h = acrophases_h, amplitudes = amplitudes, mesors = mesors, ramps = ramps)
+  }
+
+
+  # ── Helper: compute phase consistency (MRL + Rayleigh test) ────────────
+
+  compute_phase_consistency <- function(acrophases_h) {
+    acrophases_rad <- circular::circular(
+      acrophases_h * (2 * pi / 24),
+      type = "angles", units = "radians", template = "none", modulo = "2pi"
+    )
+
+    n <- length(acrophases_rad)
+    if (n < 3) return(list(mrl = NA_real_, rayleigh_p = NA_real_))
+
+    # Compute MRL directly
+    C <- sum(cos(acrophases_rad))
+    S <- sum(sin(acrophases_rad))
+    mrl <- sqrt(C^2 + S^2) / n
+
+    rayleigh <- circular::rayleigh.test(acrophases_rad)
+
+    list(mrl = as.numeric(mrl), rayleigh_p = as.numeric(rayleigh$p.value))
+  }
+
+
+  # ── Helper: compute amplitude reliability (CV of rAMP) ─────────────────
+
+  compute_amplitude_reliability <- function(ramps) {
+    ramps <- ramps[is.finite(ramps) & ramps > 0]
+    if (length(ramps) < 3) return(NA_real_)
+    sd(ramps) / mean(ramps)
+  }
+
+
+  # ── Core: analyse a single gene ────────────────────────────────────────
+
+  analyse_gene <- function(gene_name) {
+    wide <- prepare_expression_df(gene_name)
+
+    # Return NA row if insufficient data
+    na_row <- data.frame(
+      Pval = NA, Phase = NA, MESOR = NA, rAMP = NA, Rsquared = NA,
+      MRL = NA, Rayleigh_p = NA, Amp_CV = NA, n_groups = NA_integer_
+    )
+    if (is.null(wide)) return(na_row)
+
+    times <- as.numeric(colnames(wide))
+
+    # Fit population cosinor
+    pop_cosinor <- tryCatch(
+      cosinor2::population.cosinor.lm(wide, times, period = 24, plot = FALSE),
+      error = function(e) NULL
+    )
+    if (is.null(pop_cosinor)) return(na_row)
+
+    # ── Existing metrics ─────────────────────────────────────────────
+    population_cos_rAMP    <- pop_cosinor$coefficients[["Amplitude"]] / pop_cosinor$coefficients[["MESOR"]]
+    population_cos_Phase   <- {
+      phase_hours <- unlist(lapply(pop_cosinor$single.cos, function(x) {
+        round(-(cosinor2::correct.acrophase(x)) / (2 * pi / 24), 2)
+      }))
+      phase_rad <- circular::circular(phase_hours * 2 * pi / 24)
+      (as.numeric(circular::mean.circular(phase_rad)) * 24 / (2 * pi)) %% 24
+    }
+    population_cos_MESOR   <- pop_cosinor$coefficients[["MESOR"]]
+    population_rhythm_pval <- cosinor2::cosinor.detect(pop_cosinor)[4]
+    population_r_squared   <- cosinor2::cosinor.PR(pop_cosinor)$`Percent rhythm`
+
+    # ── New metrics ──────────────────────────────────────────────────
+    group_metrics <- extract_group_metrics(pop_cosinor)
+    phase_cons    <- compute_phase_consistency(group_metrics$acrophases_h)
+    amp_cv        <- compute_amplitude_reliability(group_metrics$ramps)
+
+    data.frame(
+      Pval = population_rhythm_pval, Phase = population_cos_Phase,
+      MESOR = population_cos_MESOR, rAMP = population_cos_rAMP,
+      Rsquared = population_r_squared, MRL = phase_cons$mrl,
+      Rayleigh_p = phase_cons$rayleigh_p, Amp_CV = amp_cv,
+      n_groups = nrow(wide)
+    )
+  }
+
+
+  # ── Run analysis (parallel or sequential) ──────────────────────────────
+
+  if (parallel) {
+    my.cluster <- parallel::makeCluster(cores, type = "PSOCK")
+    doParallel::registerDoParallel(cl = my.cluster)
+
+    results_df <- foreach::foreach(
+      i        = seq_len(n_genes),
+      .combine = 'rbind',
+      .inorder = TRUE,
+      .packages = c('cosinor2', 'circular', 'tidyr', 'dplyr'),
+      .export   = c('data', 'group_vec', 'time_vec',
+                     'prepare_expression_df', 'extract_group_metrics',
+                     'compute_phase_consistency', 'compute_amplitude_reliability',
+                     'analyse_gene', 'MIN_TIMEPOINTS')
+    ) %dopar% {
+      analyse_gene(rownames(data)[i])
+    }
+
+    parallel::stopCluster(cl = my.cluster)
 
   } else {
-    pb <- txtProgressBar(min = 0, max = length(rownames(data)), style = 3, width = 50, char = "=")
-    for (i in 1:length(rownames(data))) {
-      curr_gene <- rownames(data)[i]
-      expression_df <- data.frame(Expression = data[curr_gene,], Time = time_vec, Group = factor(group_vec, levels = unique(group_vec)))
-      expression_df <- expression_df %>% tidyr::pivot_wider(names_from = Time, values_from = Expression) %>% as.data.frame(); rownames(expression_df) <- expression_df$Group; expression_df$Group <- NULL
-      times <- as.numeric(colnames(expression_df))
-      pop_cosinor <- quiet(population.cosinor.lm(expression_df, times, period = 24, plot = FALSE))
-      population_cos_rAMP <- pop_cosinor$coefficients$Amplitude / pop_cosinor$coefficients$MESOR
-      population_cos_Phase <- {
-        phase_hours <- unlist(lapply(pop_cosinor$single.cos, function(x) round(-(correct.acrophase(x)) / (2*pi/24), 2)))
-        phase_rad <- circular::circular(phase_hours * 2 * pi / 24)
-        (as.numeric(circular::mean.circular(phase_rad)) * 24 / (2 * pi)) %% 24
-      }
-      population_rhythm_pval <- cosinor.detect(pop_cosinor)[4]
-      population_r_squared <- cosinor.PR(pop_cosinor)$`Percent rhythm`
-      entrained_results_df[curr_gene ,'Pval'] <- population_rhythm_pval
-      entrained_results_df[curr_gene ,'Phase'] <- population_cos_Phase
-      entrained_results_df[curr_gene ,'rAMP'] <- population_cos_rAMP
-      entrained_results_df[curr_gene ,'Rsquared'] <- population_r_squared
+    pb <- txtProgressBar(min = 0, max = n_genes, style = 3, width = 50, char = "=")
+    results_list <- vector("list", n_genes)
 
+    for (i in seq_len(n_genes)) {
+      results_list[[i]] <- analyse_gene(rownames(data)[i])
       setTxtProgressBar(pb, i)
     }
 
     close(pb)
-    entrained_results_df$Pval.adj <- round(stats::p.adjust(entrained_results_df$Pval, "BH"), 3)
-    entrained_results_df$Gene <- rownames(entrained_results_df)
-    entrained_results_df <- entrained_results_df %>% dplyr::mutate(rank_pval = rank(Pval, ties.method = 'random'),
-                                                                   rank_rsquared = rank(desc(Rsquared), ties.method = 'random')) %>%
-      dplyr::mutate(rank_sum = rank_pval + rank_rsquared)
-    object[['Rhythmicity_Results']] <- entrained_results_df
-    return(object)
+    results_df <- do.call(rbind, results_list)
   }
-  parallel::stopCluster(cl = my.cluster)
+
+
+  # ── Post-processing: naming, adjustment, ranking ───────────────────────
+
+  rownames(results_df) <- rownames(data)
+  results_df$Pval.adj  <- round(stats::p.adjust(results_df$Pval, "BH"), 3)
+  results_df$Gene      <- rownames(results_df)
+
+  # ── Composite ranking ─────────────────────────────────────────────────
+  #    Four criteria, each converted to a rank (lower = better):
+  #    1. Pval:     lower p-value -> lower rank
+  #    2. Rsquared: higher R2 -> lower rank
+  #    3. MRL:      higher MRL -> lower rank (more phase-consistent)
+  #    4. Amp_CV:   lower CV -> lower rank (more amplitude-reliable)
+
+  w <- rank_weights
+
+  results_df <- results_df %>%
+    mutate(
+      rank_pval     = base::rank(Pval,      ties.method = 'random', na.last = TRUE),
+      rank_rsquared = base::rank(-Rsquared,  ties.method = 'random', na.last = TRUE),
+      rank_mrl      = base::rank(-MRL,       ties.method = 'random', na.last = TRUE),
+      rank_amp_cv   = base::rank(Amp_CV,     ties.method = 'random', na.last = TRUE),
+      rank_sum      = w["pval"]     * rank_pval +
+                      w["rsquared"] * rank_rsquared +
+                      w["mrl"]      * rank_mrl +
+                      w["amp_cv"]   * rank_amp_cv
+    )
+
+  # ── Summary output ─────────────────────────────────────────────────────
+
+  n_sig <- sum(results_df$Pval.adj < 0.05, na.rm = TRUE)
+  n_mrl_high <- sum(results_df$MRL > 0.8, na.rm = TRUE)
+  cat("\nGenes with adj. p < 0.05:", n_sig, "/", n_genes, "\n")
+  cat("Genes with MRL > 0.8:", n_mrl_high, "/", n_genes, "\n")
+  cat("Median Amp_CV:", round(median(results_df$Amp_CV, na.rm = TRUE), 3), "\n")
+
+  object[['Rhythmicity_Results']] <- results_df
+  return(object)
 }
 
 #' Rhythmicity analysis of selected geneset
@@ -864,16 +1034,15 @@ geneset_rhythm_info <- function(object, geneset, labels, group1, group2, group3,
   if (missing(labels)) {labels <- geneset_present}
   labels <- labels[labels %in% geneset_present]
 
-  if (missing(group1)) {index_gr1 <- 1:dim(data)[2]} else {index_gr1 <- which(object[['Metadata']][['Train']][['Group_1']] %in% group1)}
-  if (missing(group2)) {index_gr2 <- 1:dim(data)[2]} else {index_gr2 <- which(object[['Metadata']][['Train']][['Group_2']] %in% group2)}
-  if (missing(group3)) {index_gr3 <- 1:dim(data)[2]} else {index_gr3 <- which(object[['Metadata']][['Train']][['Group_3']] %in% group3)}
-  if (missing(replicate)) {index_rep <- 1:dim(data)[2]} else {index_rep <- which(object[['Metadata']][['Train']][['Replicate']] %in% replicate)}
+  if (missing(group1)) {group1 <- NULL}
+  if (missing(group2)) {group2 <- NULL}
+  if (missing(group3)) {group3 <- NULL}
+  if (missing(replicate)) {replicate <- NULL}
 
-  index_used <- Reduce(intersect, list(index_gr1, index_gr2, index_gr3, index_rep))
+  index_used <- get_group_indices(object, group1, group2, group3, replicate)
   data <- data[ ,index_used]
   time_vec <- time_vec[index_used]
-  group_vec <- paste(paste(object[["Metadata"]][["Train"]][["Group_1"]], object[["Metadata"]][["Train"]][["Group_2"]],
-                           object[["Metadata"]][["Train"]][["Group_3"]], object[["Metadata"]][["Train"]][["Replicate"]], sep = '_'))[index_used]
+  group_vec <- build_group_vec(object, index_used)
 
   ind_array <- base::array(NA, dim = c(length(geneset_present), 3, length(unique(group_vec))))
 

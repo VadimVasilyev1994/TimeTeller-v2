@@ -41,35 +41,33 @@ make_data_object <- function(exp_matrix, genes, group_1, group_2, group_3, time,
 }
 
 deal_with_replicates <- function(object, treat_independently = TRUE) {
-  # Start with averaging the replicates if the user decided to
   data <- object[['Train']][['Data']]
   if (treat_independently) {
     cat('Replicates (if there are any) will be treated as independent observations for the training model\n')
     object[['Train']][['Data']] <- data
     return(object)
-  } else {
-    cat('Replicates for the same groups and time will be averaged before training the model\n')
-    counts_df <- as.data.frame(table(data$Group,data$Group_2,data$Group_3,data$Time)) %>% dplyr::filter(Freq > 1)
-    final_df <- data
-    if (dim(counts_df)[1] > 0) {
-      for (i in 1:dim(counts_df)[1]) {
-        curr_group <- counts_df[i,1]
-        curr_group_2 <- counts_df[i,2]
-        curr_group_3 <- counts_df[i,3]
-        curr_time <- counts_df[i,4]
-        curr_df <- final_df %>% dplyr::filter(Group == curr_group, Group_2 == curr_group_2, Group_3 == curr_group_3, Time == curr_time) %>% dplyr::select(starts_with('Gene_'))
-        averaged_df <- curr_df %>% dplyr::summarise(across(.cols = everything(), mean)) %>% dplyr::mutate(Group = curr_group, Group_2 = curr_group_2, Group_3 = curr_group_3, Time = curr_time, Replicate = '')
-        final_df <- final_df %>% dplyr::rows_delete(final_df %>% dplyr::filter(Group == curr_group, Group_2 == curr_group_2, Group_3 == curr_group_3, Time == curr_time)) %>% dplyr::rows_insert(averaged_df, conflict = 'ignore')
-      }
-      cat('There were ', dim(counts_df)[1],' ','groups that were averaged\n')
-      object[['Train']][['Data']] <- final_df
-    }
-    else {
-      cat('No replicates were found so no averaging was done. Please check inputs if replicates expected\n')
-      object[['Train']][['Data']] <- final_df
-    }
-    return(object)
   }
+
+  cat('Replicates for the same groups and time will be averaged before training the model\n')
+  gene_cols <- grep('^Gene_', colnames(data), value = TRUE)
+
+  # Count replicates per group-time combination
+  counts_df <- as.data.frame(table(data$Group, data$Group_2, data$Group_3, data$Time)) %>%
+    filter(Freq > 1)
+
+  if (nrow(counts_df) > 0) {
+    # Average gene expression across replicates within each group-time combination
+    averaged <- data %>%
+      group_by(Group, Group_2, Group_3, Time) %>%
+      summarise(across(all_of(gene_cols), mean), .groups = 'drop') %>%
+      mutate(Replicate = '')
+    object[['Train']][['Data']] <- averaged
+    cat('There were', nrow(counts_df), 'groups that were averaged\n')
+  } else {
+    cat('No replicates were found so no averaging was done. Please check inputs if replicates expected\n')
+    object[['Train']][['Data']] <- data
+  }
+  return(object)
 }
 
 allocate_timeseries_ind <- function(object, combine_for_norm = FALSE) {
@@ -93,96 +91,99 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
   genes <- colnames(data %>% ungroup() %>% dplyr::select(starts_with('Gene_')))
   object[['Normalisation_choice']] <- method
 
+  # Helper: shared postprocessing for all normalisation methods
+  # Adds time_group factor, arranges by time, and stores normalised data + matrix
+  store_normalised <- function(object, norm_df) {
+    norm_df <- norm_df %>%
+      mutate(time_group = factor(
+        paste('Time_', Time_mod24, sep = ''),
+        levels = paste('Time_', sort(unique(norm_df$Time_mod24)), sep = '')
+      )) %>%
+      arrange(Time_mod24)
+    object[['Train']][['Normalised_Data']] <- norm_df
+    object[['Train']][['Normalised_Train_Exp_Data']] <- norm_df %>%
+      ungroup() %>% dplyr::select(matches("normalised")) %>% as.matrix() %>% t()
+    return(object)
+  }
+
   if(method == 'timecourse') {
     cat('Using timecourse normalisation\n')
-    timeseries_norm_df <- data %>% dplyr::group_by(timeseries_ind) %>% dplyr::mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean(.x))/sd(.x)))) %>%
-      dplyr::rename_at( vars( contains( "_normalised") ), list( ~paste("normalised", gsub("_normalised", "", .), sep = "_") ) ) %>% dplyr::ungroup()
-    timeseries_norm_df <- timeseries_norm_df %>% dplyr::mutate(time_group = factor(paste('Time_', Time_mod24, sep = ''), levels = c(paste('Time_', sort(unique(timeseries_norm_df$Time_mod24)), sep = '')))) %>%
-      dplyr::arrange(Time_mod24)
-    object[['Train']][['Normalised_Data']] <- timeseries_norm_df
-    object[['Train']][['Normalised_Train_Exp_Data']] <- timeseries_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      as.matrix() %>% t()
-    return(object)
+    norm_df <- data %>% group_by(timeseries_ind) %>%
+      mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean(.x))/sd(.x)))) %>%
+      rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_"))) %>%
+      ungroup()
+    return(store_normalised(object, norm_df))
   }
 
   else if(method == 'intergene'){
     cat('Using intergene normalisation\n')
-    intergene_norm_df <- data %>% dplyr::ungroup() %>% rowwise() %>% dplyr::mutate(mean = mean(c_across(genes)), sd = sd(c_across(genes))) %>%
-      dplyr::ungroup() %>% dplyr::mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean)/sd))) %>%
-      dplyr::rename_at( vars( contains( "_normalised") ), list( ~paste("normalised", gsub("_normalised", "", .), sep = "_") ) )
-    intergene_norm_df <- intergene_norm_df %>% dplyr::mutate(time_group = factor(paste('Time_', Time_mod24, sep = ''), levels = c(paste('Time_', sort(unique(intergene_norm_df$Time_mod24)), sep = '')))) %>%
-      dplyr::arrange(Time_mod24)
-    object[['Train']][['Normalised_Data']] <- intergene_norm_df
-    object[['Train']][['Normalised_Train_Exp_Data']] <- intergene_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      as.matrix() %>% t()
-    return(object)
+    norm_df <- data %>% ungroup() %>% rowwise() %>%
+      mutate(mean = mean(c_across(genes)), sd = sd(c_across(genes))) %>%
+      ungroup() %>%
+      mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean)/sd))) %>%
+      rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_")))
+    return(store_normalised(object, norm_df))
   }
 
   else if(method == 'clr'){
     cat('Using clr normalisation\n')
-    clr_norm_df <- data %>% dplyr::ungroup() %>% rowwise() %>% dplyr::mutate(geom_mean = exp(mean(log(c_across(genes))))) %>%
-      dplyr::ungroup() %>% dplyr::mutate(across(all_of(genes), .fns = list(normalised = ~ (log(.x) - log(geom_mean))))) %>%
-      dplyr::rename_at( vars( contains( "_normalised") ), list( ~paste("normalised", gsub("_normalised", "", .), sep = "_") ) )
-    clr_norm_df <- clr_norm_df %>% dplyr::mutate(time_group = factor(paste('Time_', Time_mod24, sep = ''), levels = c(paste('Time_', sort(unique(clr_norm_df$Time_mod24)), sep = '')))) %>%
-      dplyr::arrange(Time_mod24)
-    object[['Train']][['Normalised_Data']] <- clr_norm_df
-    object[['Train']][['Normalised_Train_Exp_Data']] <- clr_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      as.matrix() %>% t()
-    return(object)
+    norm_df <- data %>% ungroup() %>% rowwise() %>%
+      mutate(geom_mean = exp(mean(log(c_across(genes))))) %>%
+      ungroup() %>%
+      mutate(across(all_of(genes), .fns = list(normalised = ~ (log(.x) - log(geom_mean))))) %>%
+      rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_")))
+    return(store_normalised(object, norm_df))
   }
 
   else if(method == 'timecourse_matched'){
     cat('Using timecourse-matched normalisation. Pay attention to the group names used when testing\n')
-    timeseries_norm_df <- data %>% dplyr::group_by(timeseries_ind) %>% dplyr::mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean(.x))/sd(.x)))) %>%
-      dplyr::rename_at( vars( contains( "_normalised") ), list( ~paste("normalised", gsub("_normalised", "", .), sep = "_") ) )
-    timeseries_norm_df <- timeseries_norm_df %>% dplyr::mutate(time_group = factor(paste('Time_', Time_mod24, sep = ''), levels = c(paste('Time_', sort(unique(timeseries_norm_df$Time_mod24)), sep = '')))) %>%
-      dplyr::arrange(Time_mod24)
-    object[['Train']][['Normalised_Data']] <- timeseries_norm_df
-    object[['Train']][['Normalised_Train_Exp_Data']] <- timeseries_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      as.matrix() %>% t()
+    norm_df <- data %>% group_by(timeseries_ind) %>%
+      mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean(.x))/sd(.x)))) %>%
+      rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_")))
+    object <- store_normalised(object, norm_df)
 
-    group_statistics <- data %>% dplyr::group_by(across(all_of(grouping_vars))) %>% dplyr::select(all_of(genes)) %>%
-      dplyr::summarise_all(list(Mean = mean,SD = sd)) %>%
-      dplyr::rename_at( vars( contains( "Gene_") ), list( ~paste("", gsub("Gene_", "", .), sep = "") ) ) %>%
+    # Store per-group mean/SD for matched normalisation of test data
+    group_statistics <- data %>% group_by(across(all_of(grouping_vars))) %>% dplyr::select(all_of(genes)) %>%
+      summarise_all(list(Mean = mean, SD = sd)) %>%
+      rename_at(vars(contains("Gene_")), list(~paste("", gsub("Gene_", "", .), sep = ""))) %>%
       tidyr::unite('timeseries_matched_name', all_of(grouping_vars), remove = FALSE, sep = '|')
     group_statistics <- as.data.frame(group_statistics)
     rownames(group_statistics) <- group_statistics$timeseries_matched_name
     group_statistics$timeseries_matched_name <- NULL
-    group_metrics_list <- sapply(c("Mean", "SD"), function(x) group_statistics[endsWith(names(group_statistics),x)], simplify = FALSE)
+    group_metrics_list <- sapply(c("Mean", "SD"), function(x) group_statistics[endsWith(names(group_statistics), x)], simplify = FALSE)
     object[['Train']][['Gene_Per_Group_Info']] <- group_metrics_list
     return(object)
   }
 
   else if(method == 'combined'){
     cat('Using intergene then timecourse-matched normalisation. Pay attention to the group names used when testing\n')
-    intergene_norm_df <- data %>% dplyr::ungroup() %>% rowwise() %>% dplyr::mutate(mean = mean(c_across(genes)), sd = sd(c_across(genes))) %>%
-      dplyr::ungroup() %>% dplyr::mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean)/sd))) %>%
-      dplyr::rename_at( vars( contains( "_normalised") ), list( ~paste("Intergene", gsub("_normalised", "", .), sep = "_") ) )
+    # Step 1: intergene normalisation
+    intergene_norm_df <- data %>% ungroup() %>% rowwise() %>%
+      mutate(mean = mean(c_across(genes)), sd = sd(c_across(genes))) %>%
+      ungroup() %>%
+      mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean)/sd))) %>%
+      rename_at(vars(contains("_normalised")), list(~paste("Intergene", gsub("_normalised", "", .), sep = "_")))
 
     new_genes <- colnames(intergene_norm_df %>% ungroup() %>% dplyr::select(starts_with('Intergene_')))
 
-    timeseries_norm_df <- intergene_norm_df %>% dplyr::group_by(timeseries_ind) %>% dplyr::mutate(across(all_of(new_genes), .fns = list(normalised = ~(.x - mean(.x))/sd(.x)))) %>%
-      dplyr::rename_at( vars( contains( "_normalised") ), list( ~paste("normalised", gsub("_normalised", "", .), sep = "_") ) )
+    # Step 2: timecourse normalisation on intergene-normalised values
+    norm_df <- intergene_norm_df %>% group_by(timeseries_ind) %>%
+      mutate(across(all_of(new_genes), .fns = list(normalised = ~(.x - mean(.x))/sd(.x)))) %>%
+      rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_")))
+    object <- store_normalised(object, norm_df)
 
-    timeseries_norm_df <- timeseries_norm_df %>% dplyr::mutate(time_group = factor(paste('Time_', Time_mod24, sep = ''), levels = c(paste('Time_', sort(unique(timeseries_norm_df$Time_mod24)), sep = '')))) %>%
-      dplyr::arrange(Time_mod24)
-    object[['Train']][['Normalised_Data']] <- timeseries_norm_df
-    object[['Train']][['Normalised_Train_Exp_Data']] <- timeseries_norm_df %>% dplyr::ungroup() %>% dplyr::select(matches("normalised")) %>%
-      as.matrix() %>% t()
-
-    group_statistics <- intergene_norm_df %>% dplyr::group_by(across(all_of(grouping_vars))) %>% dplyr::select(all_of(new_genes)) %>%
-      dplyr::summarise_all(list(Mean = mean,SD = sd)) %>%
-      dplyr::rename_at( vars( contains( "Intergene_Gene_") ), list( ~paste("", gsub("Intergene_Gene_", "", .), sep = "") ) ) %>%
+    # Store per-group mean/SD for matched normalisation of test data
+    group_statistics <- intergene_norm_df %>% group_by(across(all_of(grouping_vars))) %>% dplyr::select(all_of(new_genes)) %>%
+      summarise_all(list(Mean = mean, SD = sd)) %>%
+      rename_at(vars(contains("Intergene_Gene_")), list(~paste("", gsub("Intergene_Gene_", "", .), sep = ""))) %>%
       tidyr::unite('timeseries_matched_name', all_of(grouping_vars), remove = FALSE, sep = '|')
     group_statistics <- as.data.frame(group_statistics)
     rownames(group_statistics) <- group_statistics$timeseries_matched_name
     group_statistics$timeseries_matched_name <- NULL
-    group_metrics_list <- sapply(c("Mean", "SD"), function(x) group_statistics[endsWith(names(group_statistics),x)], simplify = FALSE)
+    group_metrics_list <- sapply(c("Mean", "SD"), function(x) group_statistics[endsWith(names(group_statistics), x)], simplify = FALSE)
     object[['Train']][['Gene_Per_Group_Info']] <- group_metrics_list
     return(object)
-
   }
-
 }
 
 get_projections <- function(object, num_PC) {
