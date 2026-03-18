@@ -49,7 +49,7 @@
 #' @importFrom Matrix nearPD
 #' @importFrom expm expm logm
 #' @importFrom magrittr %>%
-#' @importFrom dplyr filter mutate select arrange group_by ungroup summarise summarise_all mutate_at mutate_all rename rename_at rows_delete rows_insert pull across c_across rowwise starts_with ends_with contains matches all_of everything where vars desc if_else between row_number
+#' @importFrom dplyr filter mutate select arrange group_by ungroup summarise summarise_all mutate_at mutate_all rename rename_at rename_with rows_delete rows_insert pull across c_across rowwise starts_with ends_with contains matches all_of everything where vars desc if_else between row_number n_distinct
 #' @importFrom purrr map map_dbl as_mapper list_rbind list_c
 #' @importFrom tidyr unite pivot_longer pivot_wider replace_na
 #' @import ggplot2

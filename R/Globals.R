@@ -8,4 +8,6 @@ utils::globalVariables(c("Actual_Time", "Clock_Status", "Corrected_Time", "Datas
                          "timeseries_ind", "timeseries_name", "weighted_mean_time_pred", "name", "value",
                          "Pval.adj", "MESOR", "Phase", "rAMP", "Sig",
                          "MRL", "Rayleigh_p", "Amp_CV", "n_groups", "occurrence",
-                         "rank_mrl", "rank_amp_cv", "n_tp"))
+                         "rank_mrl", "rank_amp_cv", "n_tp",
+                         "Projection", "Predicted_Time", "PC", "PredError", "Condition",
+                         "Error", "Facet"))

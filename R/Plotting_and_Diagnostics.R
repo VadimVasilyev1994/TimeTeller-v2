@@ -25,12 +25,32 @@ plot_reps <- function(object, gene, group1, group2) {
   gene_names <- paste0('Gene_', gene)
   colnames(data) <- gene_names
   data <- data %>%
-    dplyr::mutate(Group = as.character(group_1), Group_2 = as.character(group_2), Time = factor(time, levels = sort(unique(time))), Replicate = as.character(replicate))
+    dplyr::mutate(Group = as.character(group_1), Group_2 = as.character(group_2),
+                  Time = factor(time, levels = sort(unique(time))), Replicate = as.character(replicate))
   pivoted_df <- pivot_longer(data, cols = all_of(gene_names), names_to = "Gene", values_to = "Expression")
-  pivoted_df <- pivoted_df %>% dplyr::filter(Group %in% group1, Group_2 %in% group2) %>% dplyr::mutate_all(~replace_na(.,"Not Provided"))
-  gg_gene <- ggplot(data = pivoted_df, mapping = aes(x = Time, y = Expression, group = Replicate)) + geom_point(aes(color = Replicate)) +
-    ggplot2::facet_grid(rows = vars(Group), cols = vars(Group_2), scales = 'fixed') + geom_line(aes(color = Replicate)) + labs(title = "Genewise expression across groups") +
-    theme(plot.title = element_text(size = 13, face = "bold", color = "black"))
+  pivoted_df <- pivoted_df %>%
+    dplyr::filter(Group %in% group1, Group_2 %in% group2) %>%
+    dplyr::mutate_all(~replace_na(.,"Not Provided"))
+
+  # Build facet label from non-trivial grouping columns
+  pivoted_df$Facet <- pivoted_df$Group
+  if (length(unique(pivoted_df$Group_2)) > 1) {
+    pivoted_df$Facet <- paste(pivoted_df$Group, pivoted_df$Group_2, sep = " | ")
+  }
+
+  n_facets <- length(unique(pivoted_df$Facet))
+  ncol_used <- min(n_facets, 4)
+  pt_size <- ifelse(n_facets > 6, 1.2, 1.8)
+  lw_used <- ifelse(n_facets > 6, 0.5, 0.7)
+
+  gg_gene <- ggplot(pivoted_df, aes(x = Time, y = Expression, group = Replicate)) +
+    geom_line(aes(color = Replicate), linewidth = lw_used) +
+    geom_point(aes(color = Replicate), size = pt_size) +
+    facet_wrap(~ Facet, ncol = ncol_used, scales = 'fixed') +
+    scale_color_manual(values = rep(tt_palette, length.out = length(unique(pivoted_df$Replicate)))) +
+    labs(title = "Gene expression across groups", x = "Time", y = "Expression") +
+    theme_tt() +
+    theme(aspect.ratio = 0.8)
   return(gg_gene)
 }
 
@@ -61,27 +81,44 @@ plot_genes <- function(object, genes, group1, group2) {
   gene_names <- paste0('Gene_', genes)
   colnames(data) <- gene_names
   data <- data %>%
-    dplyr::mutate(Group = as.character(group_1), Group_2 = as.character(group_2), Time = factor(time, levels = sort(unique(time))), Replicate = as.character(replicate))
+    dplyr::mutate(Group = as.character(group_1), Group_2 = as.character(group_2),
+                  Time = factor(time, levels = sort(unique(time))), Replicate = as.character(replicate))
 
-  linewidth_used <- ifelse(length(genes) < 6, 1.25, 1)
+  pivoted_df <- tidyr::pivot_longer(data, cols = all_of(gene_names), names_to = "Gene", values_to = "Expression")
+  group_df <- pivoted_df %>%
+    dplyr::filter(Group %in% group1, Group_2 %in% group2) %>%
+    dplyr::mutate_all(~replace_na(.,"Not Provided"))
 
-  if (length(unique(replicate)) <= 1) {
-    pivoted_df <- tidyr::pivot_longer(data, cols = all_of(gene_names), names_to = "Gene", values_to = "Expression")
-    group_df <- pivoted_df %>% dplyr::filter(Group %in% group1, Group_2 %in% group2) %>% dplyr::mutate_all(~replace_na(.,"Not Provided"))
-    gg_group <- ggplot(data = group_df, mapping = aes(x = Time, y = Expression, group = Gene)) + geom_point(aes(color = Gene)) +
-      facet_grid(rows = vars(Group), cols = vars(Group_2)) + geom_line(aes(color = Gene, linewidth = linewidth_used)) + labs(title = "Groupwise normalised expression for the selected genes") +
-      theme(plot.title = element_text(size = 12, face = "bold", color = "black"))
-  } else {
-    pivoted_df <- tidyr::pivot_longer(data, cols = all_of(gene_names), names_to = "Gene", values_to = "Expression")
-    group_df <- pivoted_df %>% dplyr::filter(Group %in% group1, Group_2 %in% group2) %>% dplyr::mutate_all(~replace_na(.,"Not Provided"))
-    gg_group <- ggplot(data = group_df, mapping = aes(x = Time, y = Expression, colour = Gene)) + geom_point(aes(color = Gene)) +
-      facet_grid(rows = vars(Group), cols = vars(Group_2)) + geom_line(aes(group = Gene), stat = "summary", fun = mean, linewidth = linewidth_used) +
-      labs(title = "Groupwise normalised expression for the selected genes") +
-      theme(plot.title = element_text(size = 12, face = "bold", color = "black"))
+  # Build facet label from non-trivial grouping columns
+  group_df$Facet <- group_df$Group
+  if (length(unique(group_df$Group_2)) > 1) {
+    group_df$Facet <- paste(group_df$Group, group_df$Group_2, sep = " | ")
   }
 
-  return(gg_group)
+  n_facets <- length(unique(group_df$Facet))
+  n_genes <- length(genes)
+  ncol_used <- min(n_facets, 4)
+  pt_size <- ifelse(n_genes > 8, 1.0, ifelse(n_genes > 4, 1.5, 2.0))
+  lw_used <- ifelse(n_genes > 8, 0.4, ifelse(n_genes > 4, 0.6, 0.8))
 
+  if (length(unique(replicate)) <= 1) {
+    gg_group <- ggplot(group_df, aes(x = Time, y = Expression, group = Gene)) +
+      geom_line(aes(color = Gene), linewidth = lw_used) +
+      geom_point(aes(color = Gene), size = pt_size)
+  } else {
+    gg_group <- ggplot(group_df, aes(x = Time, y = Expression, colour = Gene)) +
+      geom_line(aes(group = Gene), stat = "summary", fun = mean, linewidth = lw_used) +
+      geom_point(size = pt_size)
+  }
+
+  gg_group <- gg_group +
+    facet_wrap(~ Facet, ncol = ncol_used, scales = 'fixed') +
+    scale_color_manual(values = rep(tt_palette, length.out = n_genes)) +
+    labs(title = "Normalised expression by gene", x = "Time", y = "Expression") +
+    theme_tt() +
+    theme(aspect.ratio = 0.8)
+
+  return(gg_group)
 }
 
 #' Visualise the training model
@@ -202,15 +239,23 @@ plot_3d_projection_with_test <- function(object, selected_local_projection, dens
 
 }
 
-#' Visualise the the estimated temporal expression of test data
+#' Visualise the estimated temporal expression of test data
 #'
-#' Plots both known temporal expression of the training data and estimated temporal expression of the test data. This means that times used for the test data are the ones predicted by \code{TimeTeller}
+#' Plots both known temporal expression of the training data and estimated temporal expression
+#' of the test data. Times used for the test data are the ones predicted by TimeTeller.
+#' Supports intergene normalisation, TimeTeller-predicted times for training data, and
+#' custom dataset labels and gene name mappings.
 #'
 #' @param object list containing TimeTeller training and test models following \code{train_model} and \code{test_model} respectively
 #' @param genes genes / features of interest used for plotting
-#' @param theta_thresh threshold used for theta classification into 'Good' and 'Bad' clocks. This can be subjective and is used for visualisation and sanity check
-#' @param xlim_l lower limit for x axis. Helps with visualisation when samples cluster in a particular part of the day (eg biopsy samples taken mostly during day time)
-#' @param xlim_u upper limit for x axis
+#' @param new_names optional named vector mapping gene IDs to display names for facet labels
+#' @param theta_thresh threshold used for theta classification into 'Good' and 'Bad' clocks
+#' @param xlim_l lower limit for x axis. Default is 10
+#' @param xlim_u upper limit for x axis. Default is 20
+#' @param dataset_manual if TRUE, uses \code{dataset_info} as the test dataset label instead of 'Test'
+#' @param dataset_info character string to label the test dataset when \code{dataset_manual = TRUE}
+#' @param tt_time if TRUE, uses TimeTeller-predicted times instead of actual times for training data
+#' @param intergene if TRUE, applies per-sample intergene normalisation before plotting
 #'
 #' @author Vadim Vasilyev
 #'
@@ -219,29 +264,88 @@ plot_3d_projection_with_test <- function(object, selected_local_projection, dens
 #' @export
 #'
 
-exprs_vs_PredTime_plot <- function(object, genes, theta_thresh, xlim_l = 10, xlim_u = 20) {
+exprs_vs_PredTime_plot <- function(object, genes, new_names, theta_thresh, xlim_l = 10, xlim_u = 20,
+                                   dataset_manual = FALSE, dataset_info = 'Test',
+                                   tt_time = FALSE, intergene = FALSE) {
 
-  if(missing(genes)) genes <- object[['Metadata']][['Train']][['Genes_Used']]
+  if (missing(genes) & !tt_time) genes <- object[['Metadata']][['Train']][['Genes_Used']]
 
-  train_data <- as.data.frame(t(object[['Full_Original_Data']][genes,])) %>% dplyr::mutate(Time = object[['Metadata']][['Train']][['Time']] %% 24) %>%
-    dplyr::mutate(Theta = object[['Train_Data']][['Thetas_Train']], Clock_Status = if_else(Theta > theta_thresh, 'Bad','Good')) %>%
-    dplyr::mutate(Dataset = 'Train')
+  # --- Build training data ---
+  if (tt_time & !intergene) {
+    train_data <- object[['Train']][['Normalised_Data']] %>%
+      dplyr::select(starts_with("Gene_")) %>%
+      dplyr::rename_with(~sub("^Gene_", "", .), starts_with("Gene_")) %>%
+      dplyr::mutate(Time = object[['Train_Data']][['Results_df']][['time_1st_peak']] %% 24,
+                    Theta = object[['Train_Data']][['Thetas_Train']],
+                    Clock_Status = if_else(Theta > theta_thresh, 'Bad', 'Good'),
+                    Dataset = 'Train')
 
-  if ('Corrected_Time' %in% colnames(object[['Test_Data']][['Results_df']])) {
-    test_info <- object[['Test_Data']][['Results_df']] %>% dplyr::select(Corrected_Time, Theta) %>% dplyr::rename(Time = Corrected_Time)
+  } else if (tt_time & intergene) {
+    train_data_raw <- object[['Train']][['Normalised_Data']] %>%
+      dplyr::select(starts_with("Gene_")) %>%
+      dplyr::rename_with(~sub("^Gene_", "", .), starts_with("Gene_"))
+    train_data <- normalize_per_sample(train_data_raw) %>%
+      dplyr::mutate(Time = object[['Train_Data']][['Results_df']][['time_1st_peak']] %% 24,
+                    Theta = object[['Train_Data']][['Thetas_Train']],
+                    Clock_Status = if_else(Theta > theta_thresh, 'Bad', 'Good'),
+                    Dataset = 'Train')
+
   } else {
-    test_info <- object[['Test_Data']][['Results_df']] %>% dplyr::select(time_1st_peak, Theta) %>% dplyr::rename(Time = time_1st_peak)
+    train_data <- as.data.frame(t(object[['Full_Original_Data']][genes,])) %>%
+      dplyr::mutate(Time = object[['Metadata']][['Train']][['Time']] %% 24,
+                    Theta = object[['Train_Data']][['Thetas_Train']],
+                    Clock_Status = if_else(Theta > theta_thresh, 'Bad', 'Good'),
+                    Dataset = 'Train')
   }
 
-  test_data <- as.data.frame(t(object[['Test_Data']][['Full_Test_Data']][genes,]))
-  test_df <- cbind(test_info,test_data) %>% dplyr::mutate(Clock_Status = if_else(Theta > theta_thresh, 'Bad','Good')) %>%
-    dplyr::mutate(Dataset = 'Test')
+  # --- Build test data ---
+  if ('Corrected_Time' %in% colnames(object[['Test_Data']][['Results_df']])) {
+    test_info <- object[['Test_Data']][['Results_df']] %>%
+      dplyr::select(Corrected_Time, Theta) %>% dplyr::rename(Time = Corrected_Time)
+  } else {
+    test_info <- object[['Test_Data']][['Results_df']] %>%
+      dplyr::select(time_1st_peak, Theta) %>% dplyr::rename(Time = time_1st_peak)
+  }
 
-  combined_df <- rbind(train_data, test_df) %>% tidyr::pivot_longer(cols = -c(Time, Theta, Clock_Status, Dataset), names_to = 'Gene_Name', values_to = 'Expression')
+  if (intergene) {
+    test_data <- normalize_per_sample(as.data.frame(t(object[['Test_Data']][['Full_Test_Data']][genes,])))
+  } else {
+    test_data <- as.data.frame(t(object[['Test_Data']][['Full_Test_Data']][genes,]))
+  }
 
-  time_vs_exp_plot <- combined_df %>% ggplot2::ggplot(aes(x = Time, y = Expression, color = Clock_Status)) +
-    geom_point(aes(shape = Dataset, size = Dataset)) + scale_size_manual(values=c(1,3)) +
-    geom_smooth(data = combined_df %>% dplyr::filter(Dataset == 'Test', Clock_Status == 'Good'), method = 'loess') + facet_wrap(~ Gene_Name) + xlim(xlim_l,xlim_u)
+  dataset_label <- if (dataset_manual) dataset_info else 'Test'
+  test_df <- cbind(test_info, test_data) %>%
+    dplyr::mutate(Clock_Status = if_else(Theta > theta_thresh, 'Bad', 'Good'),
+                  Dataset = dataset_label)
+
+  # --- Combine and plot ---
+  combined_df <- rbind(train_data, test_df) %>%
+    tidyr::pivot_longer(cols = -c(Time, Theta, Clock_Status, Dataset),
+                        names_to = 'Gene_Name', values_to = 'Expression')
+
+  # Gene name labeller (if new_names provided)
+  if (!missing(new_names)) {
+    names_convert <- setNames(new_names, genes)
+    labeller_used <- as_labeller(names_convert)
+  } else {
+    labeller_used <- label_value
+  }
+
+  # Adaptive point sizes based on number of datasets
+  n_datasets <- length(unique(combined_df$Dataset))
+  size_vals <- rep(0.75, n_datasets)
+  size_vals[n_datasets] <- 2  # largest for the last dataset (typically test)
+
+  time_vs_exp_plot <- ggplot(combined_df, aes(x = Time, y = Expression, color = Dataset)) +
+    geom_point(aes(shape = Dataset, size = Dataset), alpha = 0.5) +
+    scale_size_manual(values = size_vals) +
+    scale_color_manual(values = nature_palette(n_datasets)) +
+    geom_smooth(aes(group = Dataset), method = 'loess', se = TRUE, linewidth = 0.8) +
+    facet_wrap(~ Gene_Name, scales = 'free', labeller = labeller_used) +
+    xlim(xlim_l, xlim_u) +
+    labs(title = "Expression vs predicted time", x = "Time (h)", y = "Expression") +
+    theme_tt() +
+    theme(aspect.ratio = 0.8)
 
   return(time_vs_exp_plot)
 }
@@ -270,14 +374,20 @@ plotPCs_test <- function(object, ymin = 0, ymax = 24) {
   test_exp_svd <- svd(test_exp_intergene_centered)
   test_projections <- t(test_exp_svd$u[,1:4]) %*% test_exp_intergene_centered
 
-  opar <- par(no.readonly = TRUE)
-  par(mfrow = c(2,2))
-  plot(test_projections[1,], object[['Test_Data']][['Results_df']]$time_1st_peak, ylim = c(ymin, ymax), xlab = 'PC1', ylab = 'Corrected Time')
-  plot(test_projections[2,], object[['Test_Data']][['Results_df']]$time_1st_peak, ylim = c(ymin, ymax), xlab = 'PC2', ylab = 'Corrected Time')
-  plot(test_projections[3,], object[['Test_Data']][['Results_df']]$time_1st_peak, ylim = c(ymin, ymax), xlab = 'PC3', ylab = 'Corrected Time')
-  plot(test_projections[4,], object[['Test_Data']][['Results_df']]$time_1st_peak, ylim = c(ymin, ymax), xlab = 'PC4', ylab = 'Corrected Time')
+  pred_time <- object[['Test_Data']][['Results_df']]$time_1st_peak
+  plot_df <- data.frame(
+    PC = rep(paste0("PC", 1:4), each = length(pred_time)),
+    Projection = c(test_projections[1,], test_projections[2,], test_projections[3,], test_projections[4,]),
+    Predicted_Time = rep(pred_time, 4)
+  )
 
-  par(opar)
+  ggplot(plot_df, aes(x = Projection, y = Predicted_Time)) +
+    geom_point(color = tt_palette[1], size = 1.5, alpha = 0.7) +
+    facet_wrap(~ PC, scales = "free_x") +
+    ylim(ymin, ymax) +
+    labs(title = "Test data PC projections vs predicted time",
+         x = "PC Projection", y = "Predicted Time (h)") +
+    theme_tt()
 }
 
 #' Cross-validation results on the training data
@@ -294,26 +404,30 @@ plotPCs_test <- function(object, ymin = 0, ymax = 24) {
 #'
 
 plot_cv_res <- function(cv_object) {
-  opar <- par(no.readonly = TRUE)
-  par(mfrow = c(1,2))
+  check_suggested_pkg('gridExtra')
   pred_errors <- purrr::map(cv_object, as_mapper(~ .x$Test_Data$Results_df$Pred_Error))
   pred_errors_plot_df <- data.frame(PredError = unlist(pred_errors, use.names = FALSE),
                                     Condition = rep(names(pred_errors), times = purrr::map_dbl(pred_errors, length)))
-  a_ordered <- with(pred_errors_plot_df, reorder(Condition, PredError, median))
-  boxplot(PredError ~ a_ordered, xaxt = 'n', xlab = 'Condition', ylab = 'PredError', main = 'Prediction Error / Cross-Validated', data = pred_errors_plot_df)
-  axis(side = 1, labels = FALSE)
-  text(x = 1:length(levels(a_ordered)), y = par("usr")[3] - 0.75, labels = levels(a_ordered),
-       xpd = NA, srt = 35, cex = 0.7)
+  pred_errors_plot_df$Condition <- reorder(pred_errors_plot_df$Condition, pred_errors_plot_df$PredError, median)
 
   thetas <- purrr::map(cv_object, as_mapper(~ .x$Test_Data$Thetas_Test))
   thetas_plot_df <- data.frame(Theta = unlist(thetas, use.names = FALSE),
                                Condition = rep(names(thetas), times = purrr::map_dbl(thetas, length)))
-  a_ordered <- with(thetas_plot_df, reorder(Condition, Theta, median))
-  boxplot(Theta ~ a_ordered, xaxt = 'n', xlab = 'Condition', ylab = 'Theta', main = 'Theta / Cross-Validated', data = thetas_plot_df)
-  axis(side = 1, labels = FALSE)
-  text(x = 1:length(levels(a_ordered)), y = par("usr")[3] - 0.05, labels = levels(a_ordered),
-       xpd = NA, srt = 35, cex = 0.7)
-  par(opar)
+  thetas_plot_df$Condition <- reorder(thetas_plot_df$Condition, thetas_plot_df$Theta, median)
+
+  p1 <- ggplot(pred_errors_plot_df, aes(x = Condition, y = PredError)) +
+    geom_boxplot(fill = tt_palette[1], alpha = 0.5, outlier.size = 1) +
+    labs(title = "Prediction Error (CV)", x = NULL, y = "Prediction Error (h)") +
+    theme_tt() +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1, size = 9))
+
+  p2 <- ggplot(thetas_plot_df, aes(x = Condition, y = Theta)) +
+    geom_boxplot(fill = tt_palette[2], alpha = 0.5, outlier.size = 1) +
+    labs(title = "Theta (CV)", x = NULL, y = expression(Theta)) +
+    theme_tt() +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1, size = 9))
+
+  gridExtra::grid.arrange(p1, p2, ncol = 2)
 }
 
 #' Cross-validation results on the training data
@@ -335,16 +449,15 @@ plot_cv_res <- function(cv_object) {
 plot_deviation_cv_corrected <- function(list_cv) {
   pred_errors <- purrr::map(list_cv, as_mapper(~ .x$Test_Data$Results_df$Pred_Error - median(.x$Test_Data$Results_df$Pred_Error)))
   actual_times <- purrr::map(list_cv, as_mapper(~ .x$Test_Data$Results_df$Actual_Time))
-  names <- factor(rep(names(pred_errors), purrr::map(pred_errors, length)), levels = unique(names(pred_errors)))
-  errors <- unlist(pred_errors)
-  times <- unlist(actual_times)
+  group_names <- factor(rep(names(pred_errors), purrr::map(pred_errors, length)), levels = unique(names(pred_errors)))
 
-  opar <- par(no.readonly = TRUE)
-  par(mar=c(5, 4, 4, 8), xpd=TRUE)
-  plot(times, errors, pch = 19, col = names, xlab = 'Actual Time', ylab = 'Error', main = 'Error corrected for deviation')
-  legend(x = "topright", inset = c(-0.2,0), box.lwd = 2 , title="Group", cex = 0.75,
-         legend=levels(names), pch=16, col=unique(names))
-  par(opar)
+  plot_df <- data.frame(Time = unlist(actual_times), Error = unlist(pred_errors), Group = group_names)
+
+  ggplot(plot_df, aes(x = Time, y = Error, color = Group)) +
+    geom_point(size = 2, alpha = 0.7) +
+    scale_color_manual(values = rep(tt_palette, length.out = length(levels(group_names)))) +
+    labs(title = "CV error corrected for deviation", x = "Actual Time (h)", y = "Error (h)") +
+    theme_tt()
 }
 
 #' Cross-validation results on the training data
@@ -363,16 +476,15 @@ plot_deviation_cv_corrected <- function(list_cv) {
 plot_deviation_cv_original <- function(list_cv) {
   pred_errors <- purrr::map(list_cv, as_mapper(~ .x$Test_Data$Results_df$Pred_Error))
   actual_times <- purrr::map(list_cv, as_mapper(~ .x$Test_Data$Results_df$Actual_Time))
-  names <- factor(rep(names(pred_errors), purrr::map(pred_errors, length)), levels = unique(names(pred_errors)))
-  errors <- unlist(pred_errors)
-  times <- unlist(actual_times)
+  group_names <- factor(rep(names(pred_errors), purrr::map(pred_errors, length)), levels = unique(names(pred_errors)))
 
-  opar <- par(no.readonly = TRUE)
-  par(mar=c(5, 4, 4, 8), xpd=TRUE)
-  plot(times, errors, pch = 19, col = names, xlab = 'Actual Time', ylab = 'Error', main = 'Original Cross Validation Error')
-  legend(x = "topright", inset = c(-0.2,0), box.lwd = 2 , title="Group", cex = 0.75,
-         legend=levels(names), pch=16, col=unique(names))
-  par(opar)
+  plot_df <- data.frame(Time = unlist(actual_times), Error = unlist(pred_errors), Group = group_names)
+
+  ggplot(plot_df, aes(x = Time, y = Error, color = Group)) +
+    geom_point(size = 2, alpha = 0.7) +
+    scale_color_manual(values = rep(tt_palette, length.out = length(levels(group_names)))) +
+    labs(title = "Original CV error", x = "Actual Time (h)", y = "Error (h)") +
+    theme_tt()
 }
 
 #' Display the results of cosinor rhythmicity analysis
@@ -404,14 +516,15 @@ display_rhythmicity_results <- function(object, probes_of_interest, info_used = 
 
     aa <- object$Rhythmicity_Results
     a1 <- ggplot(dplyr::filter(aa, rank_pval < 2500 & rank_rsquared < 2500), aes(x = rank_pval, y = rank_rsquared, text = paste("Gene:", Gene, '<br>ENTREZ:', Gene_Name))) +
-      geom_point(aes(colour = rank_sum), alpha = (1/2)) +
-      scale_colour_gradient(high = "white", low = "black") +
+      geom_point(aes(colour = rank_sum), alpha = 0.5) +
+      scale_colour_gradient(high = "grey85", low = "grey15", name = "Rank Sum") +
       geom_point(data = dplyr::filter(aa, Gene %in% probes_of_interest),
                  aes(x = rank_pval, y = rank_rsquared),
-                 color='red',
-                 size=2) +
+                 color = tt_palette[2], size = 2) +
       geom_text(data = dplyr::filter(aa, Gene %in% probes_of_interest),
-                aes(x = rank_pval, y = rank_rsquared, label = Gene), check_overlap = TRUE)
+                aes(x = rank_pval, y = rank_rsquared, label = Gene), check_overlap = TRUE) +
+      labs(title = "Rhythmicity ranks", x = "Rank (p-value)", y = "Rank (R-squared)") +
+      theme_tt()
     plotly::ggplotly(a1)
   }
   else if (info_used == 'original') {
@@ -424,15 +537,17 @@ display_rhythmicity_results <- function(object, probes_of_interest, info_used = 
     entrez_names <- aa %>% dplyr::filter(Gene %in% probes_of_interest) %>% pull(Gene_Name)
 
     a1 <- ggplot(aa, aes(x = Pval, y = Rsquared, text = paste("Gene:", Gene)))  +
-      geom_point(aes(colour = rank_sum), alpha = (1/2)) +
+      geom_point(aes(colour = rank_sum), alpha = 0.5) +
       scale_x_continuous(trans = "log10") +
-      scale_colour_gradient2(high = "red", low = "green4", mid = 'yellow', midpoint = quantile(aa$rank_sum, 0.35)) +
+      scale_colour_gradient2(high = tt_palette[2], low = tt_palette[3], mid = tt_palette[4],
+                             midpoint = quantile(aa$rank_sum, 0.35), name = "Rank Sum") +
       geom_point(data = dplyr::filter(aa, Gene %in% probes_of_interest),
                  aes(x = Pval, y = Rsquared),
-                 color='black',
-                 size=2) +
+                 color = 'black', size = 2) +
       ggrepel::geom_text_repel(data = dplyr::filter(aa, Gene %in% probes_of_interest),
-                               aes(x = Pval, y = Rsquared, label = entrez_names))
+                               aes(x = Pval, y = Rsquared, label = entrez_names)) +
+      labs(title = "Rhythmicity results", x = "P-value", y = "R-squared") +
+      theme_tt()
 
 
     return(a1)
@@ -524,24 +639,22 @@ choose_logthresh_plot <- function(choose_logthresh_df, cap = 10, perc_flat = 0.0
 
   p1 <- results_df %>% dplyr::mutate(MaxLik_Ratio_capped = ifelse(MaxLik_Ratio > cap,cap,MaxLik_Ratio)) %>% dplyr::mutate(MaxLik_Ratio_trans = MaxLik_Ratio_capped/cap)  %>%
     ggplot(aes(x = LogThresh, y = Perc_Flat, group = 1))+
-    geom_line(aes(color = "Sample % with Flat LogLik"), linewidth = 1.05) +
-    geom_line(aes(y = PeakNum_Ratio, color = "Sample % with 2 Peaks"), linewidth = 1.05) +
-    geom_line(aes(y = Mean_Theta, color = "Mean Theta for all Samples"), linewidth = 1.05) +
-    geom_line(aes(y = FlatContrib, color = "Flat Region Contribution to Theta"), linewidth = 1.05) +
-    geom_line(aes(y = MaxLik_Ratio_trans, color = "Mean MaxLik Ratio for Samples with 2 Peaks"), linewidth = 1.5) +
+    geom_line(aes(color = "% Flat LogLik"), linewidth = 1.05) +
+    geom_line(aes(y = PeakNum_Ratio, color = "% with 2 Peaks"), linewidth = 1.05) +
+    geom_line(aes(y = Mean_Theta, color = "Mean Theta"), linewidth = 1.05) +
+    geom_line(aes(y = FlatContrib, color = "Flat Contrib to Theta"), linewidth = 1.05) +
+    geom_line(aes(y = MaxLik_Ratio_trans, color = "MaxLik Ratio (scaled)"), linewidth = 1.3) +
     scale_x_reverse() + scale_y_continuous(sec.axis = sec_axis(~.*cap, name = "MaxLik Ratio")) +
-    labs(x = "LogThresh", y = "Value", color = "") +
-    scale_color_manual(values = c("orange2", "gray30", "purple", "green", "red")) + theme(legend.position = c(0.25, 0.90), legend.background=element_blank())
-  # + geom_vline(xintercept = suggested_logthresh, col = 'blue')
-  # + geom_label(
-  #   label=paste0('LogThresh Suggested is: ', suggested_logthresh),
-  #   x=10,
-  #   y=0.2,
-  #   label.padding = unit(0.55, "lines"), # Rectangle size around label
-  #   label.size = 0.35,
-  #   color = "black",
-  #   fill="#69b3a2"
-  # )
+    labs(x = "LogThresh", y = "Value", color = NULL) +
+    scale_color_manual(values = c(
+      "% Flat LogLik"          = tt_palette[1],
+      "% with 2 Peaks"         = tt_palette[2],
+      "Mean Theta"              = tt_palette[3],
+      "Flat Contrib to Theta"   = tt_palette[4],
+      "MaxLik Ratio (scaled)"   = tt_palette[6]
+    )) +
+    theme_tt() +
+    theme(legend.position = c(0.30, 0.88))
   return(p1)
 }
 

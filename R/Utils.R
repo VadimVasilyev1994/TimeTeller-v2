@@ -165,3 +165,60 @@ get_tt_res <- function(object, train_or_test = 'test') {
     return(object$Train_Data$Results_df)
   }
 }
+
+## ---------------------------------------------------------------------------
+## Package-wide ggplot theme and colour palettes
+## ---------------------------------------------------------------------------
+
+# Tol Bright colourblind-safe palette (7 colours)
+tt_palette <- c("#4477AA", "#EE6677", "#228833", "#CCBB44",
+                "#66CCEE", "#AA3377", "#BBBBBB")
+
+#' Nature-style colour palette
+#'
+#' Provides qualitative, sequential, or diverging colour palettes suitable
+#' for publication figures.
+#'
+#' @param n number of colours to generate (NULL returns the base palette)
+#' @param type one of 'qualitative', 'sequential_blue', or 'diverging'
+#' @return character vector of hex colour codes
+#' @export
+nature_palette <- function(n = NULL, type = "qualitative") {
+  palettes <- list(
+    qualitative    = c("#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", "#8491B4"),
+    sequential_blue = c("#F7FBFF", "#DEEBF7", "#C6DBEF", "#9ECAE1", "#6BAED6", "#4292C6"),
+    diverging      = c("#D7191C", "#FDAE61", "#FFFFBF", "#ABD9E9", "#2C7BB6")
+  )
+  pal <- palettes[[type]]
+  if (!is.null(n)) pal <- colorRampPalette(pal)(n)
+  pal
+}
+
+# Internal theme for consistent TimeTeller plots
+#' @noRd
+theme_tt <- function(base_size = 12) {
+  theme_classic(base_size = base_size) %+replace%
+    theme(
+      plot.title        = element_text(size = base_size + 1, face = "bold", hjust = 0),
+      plot.subtitle     = element_text(size = base_size - 1, color = "grey40"),
+      axis.title        = element_text(size = base_size),
+      axis.text         = element_text(size = base_size - 1),
+      legend.title      = element_text(size = base_size - 1, face = "bold"),
+      legend.text       = element_text(size = base_size - 2),
+      legend.position   = "bottom",
+      legend.background = element_blank(),
+      strip.background  = element_rect(fill = "grey95", colour = NA),
+      strip.text        = element_text(size = base_size - 1, face = "bold"),
+      panel.grid.major  = element_line(colour = "grey90", linewidth = 0.3),
+      plot.margin       = margin(10, 10, 10, 10)
+    )
+}
+
+# Per-sample intergene normalisation helper (samples x genes matrix)
+normalize_per_sample <- function(data_matrix) {
+  normalized <- t(apply(data_matrix, 1, function(x) {
+    (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+  }))
+  colnames(normalized) <- colnames(data_matrix)
+  as.data.frame(normalized)
+}

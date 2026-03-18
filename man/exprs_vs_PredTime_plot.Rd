@@ -2,26 +2,50 @@
 % Please edit documentation in R/Plotting_and_Diagnostics.R
 \name{exprs_vs_PredTime_plot}
 \alias{exprs_vs_PredTime_plot}
-\title{Visualise the the estimated temporal expression of test data}
+\title{Visualise the estimated temporal expression of test data}
 \usage{
-exprs_vs_PredTime_plot(object, genes, theta_thresh, xlim_l = 10, xlim_u = 20)
+exprs_vs_PredTime_plot(
+  object,
+  genes,
+  new_names,
+  theta_thresh,
+  xlim_l = 10,
+  xlim_u = 20,
+  dataset_manual = FALSE,
+  dataset_info = "Test",
+  tt_time = FALSE,
+  intergene = FALSE
+)
 }
 \arguments{
 \item{object}{list containing TimeTeller training and test models following \code{train_model} and \code{test_model} respectively}
 
 \item{genes}{genes / features of interest used for plotting}
 
-\item{theta_thresh}{threshold used for theta classification into 'Good' and 'Bad' clocks. This can be subjective and is used for visualisation and sanity check}
+\item{new_names}{optional named vector mapping gene IDs to display names for facet labels}
 
-\item{xlim_l}{lower limit for x axis. Helps with visualisation when samples cluster in a particular part of the day (eg biopsy samples taken mostly during day time)}
+\item{theta_thresh}{threshold used for theta classification into 'Good' and 'Bad' clocks}
 
-\item{xlim_u}{upper limit for x axis}
+\item{xlim_l}{lower limit for x axis. Default is 10}
+
+\item{xlim_u}{upper limit for x axis. Default is 20}
+
+\item{dataset_manual}{if TRUE, uses \code{dataset_info} as the test dataset label instead of 'Test'}
+
+\item{dataset_info}{character string to label the test dataset when \code{dataset_manual = TRUE}}
+
+\item{tt_time}{if TRUE, uses TimeTeller-predicted times instead of actual times for training data}
+
+\item{intergene}{if TRUE, applies per-sample intergene normalisation before plotting}
 }
 \value{
 Returned is the \code{ggplot} object
 }
 \description{
-Plots both known temporal expression of the training data and estimated temporal expression of the test data. This means that times used for the test data are the ones predicted by \code{TimeTeller}
+Plots both known temporal expression of the training data and estimated temporal expression
+of the test data. Times used for the test data are the ones predicted by TimeTeller.
+Supports intergene normalisation, TimeTeller-predicted times for training data, and
+custom dataset labels and gene name mappings.
 }
 \author{
 Vadim Vasilyev
