@@ -118,7 +118,7 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
   else if(method == 'intergene'){
     cat('Using intergene normalisation\n')
     norm_df <- data %>% ungroup() %>% rowwise() %>%
-      mutate(mean = mean(c_across(genes)), sd = sd(c_across(genes))) %>%
+      mutate(mean = mean(c_across(all_of(genes))), sd = sd(c_across(all_of(genes)))) %>%
       ungroup() %>%
       mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean)/sd))) %>%
       rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_")))
@@ -128,7 +128,7 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
   else if(method == 'clr'){
     cat('Using clr normalisation\n')
     norm_df <- data %>% ungroup() %>% rowwise() %>%
-      mutate(geom_mean = exp(mean(log(c_across(genes))))) %>%
+      mutate(geom_mean = exp(mean(log(c_across(all_of(genes)))))) %>%
       ungroup() %>%
       mutate(across(all_of(genes), .fns = list(normalised = ~ (log(.x) - log(geom_mean))))) %>%
       rename_at(vars(contains("_normalised")), list(~paste("normalised", gsub("_normalised", "", .), sep = "_")))
@@ -159,7 +159,7 @@ normalised_df <- function(object, method = 'intergene', grouping_vars = c('Group
     cat('Using intergene then timecourse-matched normalisation. Pay attention to the group names used when testing\n')
     # Step 1: intergene normalisation
     intergene_norm_df <- data %>% ungroup() %>% rowwise() %>%
-      mutate(mean = mean(c_across(genes)), sd = sd(c_across(genes))) %>%
+      mutate(mean = mean(c_across(all_of(genes))), sd = sd(c_across(all_of(genes)))) %>%
       ungroup() %>%
       mutate(across(all_of(genes), .fns = list(normalised = ~(.x - mean)/sd))) %>%
       rename_at(vars(contains("_normalised")), list(~paste("Intergene", gsub("_normalised", "", .), sep = "_")))

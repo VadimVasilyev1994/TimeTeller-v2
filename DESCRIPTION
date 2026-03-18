@@ -33,6 +33,7 @@ Imports:
 Suggests: 
     ggrepel,
     gprofiler2,
+    gridExtra,
     knitr,
     plotly,
     rgl,
@@ -40,7 +41,9 @@ Suggests:
     rrcov,
     SummarizedExperiment,
     edgeR,
+    testthat (>= 3.0.0),
     tidytext
+Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://github.com/VadimVasilyev1994/TimeTeller-v2
 BugReports: https://github.com/VadimVasilyev1994/TimeTeller-v2/issues
