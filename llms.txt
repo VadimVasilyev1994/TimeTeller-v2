@@ -54,9 +54,11 @@ Examples and documentation available at
 - [`display_rhythmicity_results()`](https://vadimvasilyev1994.github.io/TimeTeller/reference/display_rhythmicity_results.md)
   : Display the results of cosinor rhythmicity analysis
 - [`exprs_vs_PredTime_plot()`](https://vadimvasilyev1994.github.io/TimeTeller/reference/exprs_vs_PredTime_plot.md)
-  : Visualise the the estimated temporal expression of test data
+  : Visualise the estimated temporal expression of test data
 - [`geneset_rhythm_info()`](https://vadimvasilyev1994.github.io/TimeTeller/reference/geneset_rhythm_info.md)
   : Rhythmicity analysis of selected geneset
+- [`nature_palette()`](https://vadimvasilyev1994.github.io/TimeTeller/reference/nature_palette.md)
+  : Nature-style colour palette
 - [`panda_data`](https://vadimvasilyev1994.github.io/TimeTeller/reference/panda_data.md)
   : Panda data
 - [`plotPCs_test()`](https://vadimvasilyev1994.github.io/TimeTeller/reference/plotPCs_test.md)
