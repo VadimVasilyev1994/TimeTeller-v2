@@ -100,7 +100,6 @@ plot_genes <- function(object, genes, group1, group2) {
 #' @return Returned is the \code{plot_ly} object
 #' @export
 #'
-
 plot_3d_projection <- function(object, selected_local_projection, density = FALSE, opacity = 0.05, sig_level = 0.90) {
   check_suggested_pkg('plotly')
   if (density) check_suggested_pkg('rgl')
@@ -130,36 +129,7 @@ plot_3d_projection <- function(object, selected_local_projection, density = FALS
               line = list(width = 6), hoverinfo='skip', showlegend = FALSE, name = 'Spline for Train Data') %>%
     plotly::colorbar(title = "Time (Hours)")
   if (density) {
-    if (cov_method == 'normal') {
-      # Generate local MVN plots
-      data.split <- split(data[, 1:3], data$sample_times)
-      data.mvnorm <- lapply(data.split, function(x) mvnorm.mle(as.matrix(x)))
-      mvn_names <- names(data.mvnorm)
-      for (i in 1:length(data.mvnorm)) {
-        curr_proj_time <- mvn_names[i]
-        curr_mean <- data.mvnorm[[curr_proj_time]]$mu
-        curr_sigma <- data.mvnorm[[curr_proj_time]]$sigma
-        curr_ellipse <- rgl::ellipse3d(curr_sigma, centre = curr_mean, level = sig_level)
-        fig <- fig %>%
-          plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
-                    type = 'scatter3d',mode = 'markers', hoverinfo='skip', showlegend = FALSE, inherit = FALSE)
-      }
-    }
-    if (cov_method == 'robust') {
-      # Generate local MVN plots
-      data.split <- split(data[, 1:3], data$sample_times)
-      data.mvnorm <- lapply(data.split, function(x) rrcov::CovMcd(as.matrix(x), alpha = 0.8))
-      mvn_names <- names(data.mvnorm)
-      for (i in 1:length(data.mvnorm)) {
-        curr_proj_time <- mvn_names[i]
-        curr_mean <- data.mvnorm[[curr_proj_time]]$center
-        curr_sigma <- data.mvnorm[[curr_proj_time]]$cov
-        curr_ellipse <- rgl::ellipse3d(curr_sigma, centre = curr_mean, level = sig_level)
-        fig <- fig %>%
-          plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
-                    type = 'scatter3d',mode = 'markers', hoverinfo='skip', showlegend = FALSE, inherit = FALSE)
-      }
-    }
+    fig <- add_density_ellipsoids(fig, data, cov_method, my_colors, opacity, sig_level)
   }
   fig <- fig %>% plotly::layout(title = paste(title,projection_name), scene = list(bgcolor = "#e5ecf6"))
   return(fig)
@@ -225,21 +195,7 @@ plot_3d_projection_with_test <- function(object, selected_local_projection, dens
               line = list(width = 6) , name = 'Spline for Train Data') %>%
     plotly::colorbar(title = "Time (Hours)")
   if (density) {
-    # Generate local MVN plots
-    data.split <- split(data[, 1:3], data$sample_times)
-    data.mvnorm <- lapply(data.split, function(x) mvnorm.mle(as.matrix(x)))
-    mvn_names <- names(data.mvnorm)
-    for (i in 1:length(data.mvnorm)) {
-      curr_proj_time <- mvn_names[i]
-      curr_mean <- data.mvnorm[[curr_proj_time]]$mu
-      curr_sigma <- data.mvnorm[[curr_proj_time]]$sigma
-      curr_ellipse <- rgl::ellipse3d(curr_sigma, centre = curr_mean, level = sig_level)
-      if (density) {
-        fig <- fig %>%
-          plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,], color = I(my_colors[i]), opacity = opacity,
-                    type = 'scatter3d',mode = 'markers', hoverinfo='skip', showlegend = FALSE, inherit = FALSE)
-      }
-    }
+    fig <- add_density_ellipsoids(fig, data, object[['Projections']][['Cov_Method']], my_colors, opacity, sig_level)
   }
   fig <- fig %>% plotly::layout(title = paste(title,projection_name), scene = list(bgcolor = "#e5ecf6"))
   return(fig)
@@ -507,63 +463,40 @@ choose_logthresh <- function(object, max_log = 0, min_log = -12, by_step = -1, t
   colnames(xx) <- c('Perc_Flat', 'PeakNum_Ratio', 'MaxLik_Ratio', 'Mean_Theta', 'Median_Theta', 'FlatContrib')
   iter <- 1
 
-  for (i in seq(max_log,min_log,by=by_step)) {
-    logthresh <- i
-    cat('Calculating for LogThresh ', logthresh, '\n')
-
-    if (train_or_test == 'test') {
-      a_int <- get_final_likelis_test(object, logthresh)
-      a_int <- theta_calc_test(a_int)
-      a_int <- calc_flat_theta_contrib_test(a_int)
-      a_int <- second_peaks_fun_test(a_int)
-      data_df <- a_int[['Test_Data']][['Results_df']]
-
-      results_vec <- c()
-      perc_flat <- data_df$PercFlat
-      perc_flat_constraint <- sum(perc_flat == 100) / dim(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])[2]
-      peaknum_ratio <- round(table(data_df$npeaks)['2']/dim(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])[2],2)
-      maxlik_ratio <- log(mean(exp(data_df$max_1st_peak)/exp(data_df$max_2nd_peak), na.rm = TRUE))
-      mean_theta <- round(mean(data_df$Theta),3)
-      median_theta <- round(median(data_df$Theta),3)
-      mean_flat_theta_contrib <- round(mean(data_df$FlatContrib),2)
-
-      results_vec[1] <- perc_flat_constraint
-      results_vec[2] <- peaknum_ratio
-      results_vec[3] <- maxlik_ratio
-      results_vec[4] <- mean_theta
-      results_vec[5] <- median_theta
-      results_vec[6] <- mean_flat_theta_contrib / 100
-
-    } else if (train_or_test == 'train') {
-      a_int <- get_final_likelis_train(object, logthresh)
-      a_int <- theta_calc_train(a_int)
-      a_int <- calc_flat_theta_contrib_train(a_int)
-      a_int <- second_peaks_fun_train(a_int)
-      data_df <- a_int[['Train_Data']][['Results_df']]
-
-      results_vec <- c()
-      perc_flat <- data_df$PercFlat
-      perc_flat_constraint <- sum(perc_flat == 100) / dim(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])[2]
-      peaknum_ratio <- round(table(data_df$npeaks)['2']/dim(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])[2],2)
-      maxlik_ratio <- log(mean(exp(data_df$max_1st_peak)/exp(data_df$max_2nd_peak), na.rm = TRUE))
-      mean_theta <- round(mean(data_df$Theta),3)
-      median_theta <- round(median(data_df$Theta),3)
-      mean_flat_theta_contrib <- round(mean(data_df$FlatContrib),2)
-
-      results_vec[1] <- perc_flat_constraint
-      results_vec[2] <- peaknum_ratio
-      results_vec[3] <- maxlik_ratio
-      results_vec[4] <- mean_theta
-      results_vec[5] <- median_theta
-      results_vec[6] <- mean_flat_theta_contrib / 100
-    }
-
-    xx[iter,] <- results_vec
-    iter <- iter + 1
-
+  # Resolve slot names once
+  if (train_or_test == 'test') {
+    data_slot <- 'Test_Data'
+    avg_key <- 'Averaged_Likelis_Post_Thresh_Test'
+  } else {
+    data_slot <- 'Train_Data'
+    avg_key <- 'Averaged_Likelis_Post_Thresh_Train'
   }
 
-  xx$LogThresh <- seq(max_log,min_log,by=by_step)
+  for (i in seq(max_log, min_log, by = by_step)) {
+    cat('Calculating for LogThresh ', i, '\n')
+
+    # Run the pipeline using unified functions
+    a_int <- get_final_likelis(object, log_thresh = i, mode = train_or_test)
+    a_int <- theta_calc(a_int, mode = train_or_test,
+                        epsilon = if (train_or_test == 'train') 0.4 else NULL,
+                        eta = if (train_or_test == 'train') 0.35 else NULL)
+    a_int <- calc_flat_theta_contrib(a_int, mode = train_or_test)
+    a_int <- second_peaks_fun(a_int, mode = train_or_test)
+    data_df <- a_int[[data_slot]][['Results_df']]
+
+    n_samples <- dim(object[[data_slot]][[avg_key]])[2]
+    xx[iter, ] <- c(
+      sum(data_df$PercFlat == 100) / n_samples,
+      round(table(data_df$npeaks)['2'] / n_samples, 2),
+      log(mean(exp(data_df$max_1st_peak) / exp(data_df$max_2nd_peak), na.rm = TRUE)),
+      round(mean(data_df$Theta), 3),
+      round(median(data_df$Theta), 3),
+      round(mean(data_df$FlatContrib), 2) / 100
+    )
+    iter <- iter + 1
+  }
+
+  xx$LogThresh <- seq(max_log, min_log, by = by_step)
   return(xx)
 
 }
@@ -775,6 +708,13 @@ choose_genes_tt <- function(object,
   n_genes <- nrow(data)
   cat("Analysing", n_genes, "genes across", length(unique(group_vec)), "groups\n")
 
+  # Validate rank_weights
+  required_names <- c("pval", "rsquared", "mrl", "amp_cv")
+  if (!all(required_names %in% names(rank_weights))) {
+    stop("rank_weights must be a named vector with names: ",
+         paste(required_names, collapse = ", "), call. = FALSE)
+  }
+
 
   # ── Helper: prepare wide-format df for population.cosinor.lm ───────────
   #    Handles mod-24 duplicate timepoints by cycle-splitting, and drops
@@ -931,17 +871,99 @@ choose_genes_tt <- function(object,
     my.cluster <- parallel::makeCluster(cores, type = "PSOCK")
     doParallel::registerDoParallel(cl = my.cluster)
 
+    # Capture variables that helpers close over for clean parallel export
+    .env <- environment()
+
     results_df <- foreach::foreach(
       i        = seq_len(n_genes),
       .combine = 'rbind',
       .inorder = TRUE,
-      .packages = c('cosinor2', 'circular', 'tidyr', 'dplyr'),
-      .export   = c('data', 'group_vec', 'time_vec',
-                     'prepare_expression_df', 'extract_group_metrics',
-                     'compute_phase_consistency', 'compute_amplitude_reliability',
-                     'analyse_gene', 'MIN_TIMEPOINTS')
+      .packages = c('cosinor2', 'circular', 'tidyr', 'dplyr')
     ) %dopar% {
-      analyse_gene(rownames(data)[i])
+      # Define helpers inline so workers have full access to captured variables
+      .prepare_expression_df <- function(gene_name) {
+        df <- data.frame(
+          Expression = .env$data[gene_name, ],
+          Time       = .env$time_vec,
+          Group      = factor(.env$group_vec, levels = unique(.env$group_vec))
+        )
+        df <- df %>%
+          dplyr::group_by(Group, Time) %>%
+          dplyr::mutate(occurrence = dplyr::row_number()) %>%
+          dplyr::ungroup() %>%
+          dplyr::mutate(Group = dplyr::if_else(
+            occurrence > 1L,
+            paste0(as.character(Group), "_cycle", occurrence),
+            as.character(Group)
+          )) %>%
+          dplyr::select(-occurrence)
+        group_tp_counts <- df %>%
+          dplyr::group_by(Group) %>%
+          dplyr::summarise(n_tp = dplyr::n_distinct(Time), .groups = "drop")
+        keep_groups <- group_tp_counts$Group[group_tp_counts$n_tp >= .env$MIN_TIMEPOINTS]
+        if (length(keep_groups) < 2) return(NULL)
+        df <- df %>% dplyr::filter(Group %in% keep_groups)
+        df$Group <- factor(df$Group, levels = unique(df$Group))
+        wide <- df %>%
+          tidyr::pivot_wider(names_from = Time, values_from = Expression) %>%
+          as.data.frame()
+        rownames(wide) <- wide$Group
+        wide$Group <- NULL
+        return(wide)
+      }
+
+      wide <- .prepare_expression_df(rownames(.env$data)[i])
+      na_row <- data.frame(
+        Pval = NA, Phase = NA, MESOR = NA, rAMP = NA, Rsquared = NA,
+        MRL = NA, Rayleigh_p = NA, Amp_CV = NA, n_groups = NA_integer_
+      )
+      if (is.null(wide)) return(na_row)
+      times <- as.numeric(colnames(wide))
+      pop_cosinor <- tryCatch(
+        cosinor2::population.cosinor.lm(wide, times, period = 24, plot = FALSE),
+        error = function(e) NULL
+      )
+      if (is.null(pop_cosinor)) return(na_row)
+
+      # Metrics
+      population_cos_rAMP  <- pop_cosinor$coefficients[["Amplitude"]] / pop_cosinor$coefficients[["MESOR"]]
+      population_cos_Phase <- {
+        phase_hours <- unlist(lapply(pop_cosinor$single.cos, function(x) {
+          round(-(cosinor2::correct.acrophase(x)) / (2 * pi / 24), 2)
+        }))
+        phase_rad <- circular::circular(phase_hours * 2 * pi / 24)
+        (as.numeric(circular::mean.circular(phase_rad)) * 24 / (2 * pi)) %% 24
+      }
+      population_cos_MESOR   <- pop_cosinor$coefficients[["MESOR"]]
+      population_rhythm_pval <- cosinor2::cosinor.detect(pop_cosinor)[4]
+      population_r_squared   <- cosinor2::cosinor.PR(pop_cosinor)$`Percent rhythm`
+
+      single_fits <- pop_cosinor$single.cos
+      acrophases_h <- unlist(lapply(single_fits, function(x) -(cosinor2::correct.acrophase(x)) / (2 * pi / 24)))
+      ramps <- unlist(lapply(single_fits, function(x) unname(x$coefficients[2] / x$coefficients[1])))
+
+      # Phase consistency (MRL)
+      acrophases_rad <- circular::circular(acrophases_h * (2 * pi / 24), type = "angles", units = "radians", template = "none", modulo = "2pi")
+      n_acr <- length(acrophases_rad)
+      if (n_acr >= 3) {
+        C <- sum(cos(acrophases_rad)); S <- sum(sin(acrophases_rad))
+        mrl <- as.numeric(sqrt(C^2 + S^2) / n_acr)
+        rayleigh_p <- as.numeric(circular::rayleigh.test(acrophases_rad)$p.value)
+      } else {
+        mrl <- NA_real_; rayleigh_p <- NA_real_
+      }
+
+      # Amplitude reliability (CV)
+      ramps_clean <- ramps[is.finite(ramps) & ramps > 0]
+      amp_cv <- if (length(ramps_clean) >= 3) sd(ramps_clean) / mean(ramps_clean) else NA_real_
+
+      data.frame(
+        Pval = population_rhythm_pval, Phase = population_cos_Phase,
+        MESOR = population_cos_MESOR, rAMP = population_cos_rAMP,
+        Rsquared = population_r_squared, MRL = mrl,
+        Rayleigh_p = rayleigh_p, Amp_CV = amp_cv,
+        n_groups = nrow(wide)
+      )
     }
 
     parallel::stopCluster(cl = my.cluster)
@@ -1167,4 +1189,32 @@ plot_pc_importance <- function(object) {
   data_df <- data.frame(value = unname(data_vec), name = names(data_vec))
   ggplot(data_df, aes(x = name, y = value, color = name, fill = name)) + geom_boxplot(show.legend = FALSE) +
     labs(x = 'Principal Component',y = 'Cumulative variation explained', title = 'Explained Variation')
+}
+
+# Internal helper: add MVN ellipsoid density traces to a plotly figure (not exported)
+add_density_ellipsoids <- function(fig, data, cov_method, my_colors, opacity, sig_level) {
+  check_suggested_pkg('rgl')
+  data.split <- split(data[, 1:3], data$sample_times)
+  if (cov_method == 'normal') {
+    data.mvnorm <- lapply(data.split, function(x) mvnorm.mle(as.matrix(x)))
+    get_mean <- function(x) x$mu
+    get_cov <- function(x) x$sigma
+  } else if (cov_method == 'robust') {
+    check_suggested_pkg('rrcov')
+    data.mvnorm <- lapply(data.split, function(x) rrcov::CovMcd(as.matrix(x), alpha = 0.8))
+    get_mean <- function(x) x$center
+    get_cov <- function(x) x$cov
+  }
+  mvn_names <- names(data.mvnorm)
+  for (i in seq_along(data.mvnorm)) {
+    curr_ellipse <- rgl::ellipse3d(get_cov(data.mvnorm[[mvn_names[i]]]),
+                                   centre = get_mean(data.mvnorm[[mvn_names[i]]]),
+                                   level = sig_level)
+    fig <- fig %>%
+      plotly::add_trace(x = curr_ellipse$vb[1,], y = curr_ellipse$vb[2,], z = curr_ellipse$vb[3,],
+                        color = I(my_colors[i]), opacity = opacity,
+                        type = 'scatter3d', mode = 'markers', hoverinfo = 'skip',
+                        showlegend = FALSE, inherit = FALSE)
+  }
+  return(fig)
 }

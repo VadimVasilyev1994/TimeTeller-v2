@@ -27,8 +27,6 @@ normalise_test_data <- function(object, exp_matrix, test_grouping_vars, test_gro
     splitting_vec <- data.frame(Test_Group_1 = test_group_1, Test_Group_2 = test_group_2, Test_Group_3 = test_group_3, Test_Replicate = test_replicate) %>%
       tidyr::unite('test_timeseries_matched_name', all_of(test_grouping_vars), remove = FALSE, sep = '|') %>% dplyr::pull(test_timeseries_matched_name)
     split_df <- split(as.data.frame(t(exp_matrix[object$Metadata$Train$Genes_Used, ])), splitting_vec)
-    object[['Check']] <- split_df
-    df_names <- names(split_df)
     cat(paste('# Data found for the following groups: ', names(split_df)[names(split_df) %in% rownames(means)],'\n'))
     cat(paste('# Data NOT found for the following groups: ', names(split_df)[!(names(split_df) %in% rownames(means))],' ==> For these standard timecourse normalisaiton will be used\n'))
     split_df_ts_norm <- lapply(seq_along(split_df), function(i)
@@ -45,8 +43,6 @@ normalise_test_data <- function(object, exp_matrix, test_grouping_vars, test_gro
     splitting_vec <- data.frame(Test_Group_1 = test_group_1, Test_Group_2 = test_group_2, Test_Group_3 = test_group_3, Test_Replicate = test_replicate) %>%
       tidyr::unite('test_timeseries_matched_name', all_of(test_grouping_vars), remove = FALSE, sep = '|') %>% dplyr::pull(test_timeseries_matched_name)
     split_df <- split(as.data.frame(t(base::scale(exp_matrix[object$Metadata$Train$Genes_Used, ]))), splitting_vec)
-    object[['Check']] <- split_df
-    df_names <- names(split_df)
     cat(paste('# Data found for the following groups: ', names(split_df)[names(split_df) %in% rownames(means)],'\n'))
     cat(paste('# Data NOT found for the following groups: ', names(split_df)[!(names(split_df) %in% rownames(means))],' ==> For these standard timecourse normalisaiton will be used\n'))
     split_df_ts_norm <- lapply(seq_along(split_df), function(i)
