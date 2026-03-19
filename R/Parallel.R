@@ -23,9 +23,10 @@ theta_calc_parallel <- function(object, mode = 'train', epsilon = NULL, eta = NU
     curr_curve <- suppressWarnings(
       eta * (1 + epsilon + cos(2 * pi * ((1:num_points) / num_points - peak_pos / num_points)))
     )
-    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points, curr_lrf_curve, period = num_points), seq(1, num_points, length.out = 1000))
-    curve_spline <- stats::predict(splines::periodicSpline(1:num_points, curr_curve, period = num_points), seq(1, num_points, length.out = 1000))
-    sum(lrf_curve_spline$y > curve_spline$y) / length(lrf_curve_spline$y)
+    eval_seq <- seq(1, num_points, length.out = 500L)
+    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points, curr_lrf_curve, period = num_points), eval_seq)
+    curve_spline <- stats::predict(splines::periodicSpline(1:num_points, curr_curve, period = num_points), eval_seq)
+    sum(lrf_curve_spline$y > curve_spline$y) / 500L
   }
 
   if (mode == 'train') {
@@ -69,8 +70,9 @@ calc_flat_theta_contrib_parallel <- function(object, mode = 'train') {
     curr_curve <- suppressWarnings(
       eta * (1 + epsilon + cos(2 * pi * ((1:num_points) / num_points - peak_pos / num_points)))
     )
-    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points, ind_lrf_curve, period = num_points), seq(1, num_points, length.out = 1000))
-    curve_spline <- stats::predict(splines::periodicSpline(1:num_points, curr_curve, period = num_points), seq(1, num_points, length.out = 1000))
+    eval_seq <- seq(1, num_points, length.out = 500L)
+    lrf_curve_spline <- stats::predict(splines::periodicSpline(1:num_points, ind_lrf_curve, period = num_points), eval_seq)
+    curve_spline <- stats::predict(splines::periodicSpline(1:num_points, curr_curve, period = num_points), eval_seq)
     theta_index <- which(lrf_curve_spline$y > curve_spline$y)
     flat_regions <- which(abs(diff(lrf_curve_spline$y)) < 1e-4)
     sum(theta_index %in% flat_regions) / length(theta_index) * 100
@@ -115,27 +117,29 @@ calc_likelis_parallel <- function(object, mode = 'train') {
     exp_data <- object[['Test_Data']][['Normalised_Test_Exp_Data']]
   }
 
+  n_interp <- dim(fitted_mvn_data)[2]
+
   out_list <- foreach(i = 1:length(names(svd_data)), .combine = 'c', .inorder = TRUE, .multicombine = TRUE, .packages = c('Matrix','mvtnorm','foreach')) %dopar% {
     project_exp_mat <- svd_data[[i]] %*% exp_data
-    mat <- matrix(NA, nrow = dim(fitted_mvn_data)[2], ncol = dim(exp_data)[2])
-    for (ind_num in 1:dim(exp_data)[2]) {
-      vec <- numeric(length = dim(fitted_mvn_data)[2])
-      for (j in 1:dim(fitted_mvn_data)[2]) {
-        curr_sigma <- matrix(fitted_mvn_data[(num_PC+1):(num_PC+num_PC^2),j,i], nrow = num_PC)
-        curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
-        if (any(curr_eig < 0)) {
-          sigma_used <- nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE, eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat
-        } else {
-          sigma_used <- curr_sigma
-        }
-        vec[j] <- mvtnorm::dmvnorm(project_exp_mat[,ind_num], mean = fitted_mvn_data[1:num_PC,j,i], sigma = sigma_used, checkSymmetry = FALSE, log = TRUE)
+    samples_mat <- t(project_exp_mat)  # n_samples x num_PC
+    mat <- matrix(NA, nrow = n_interp, ncol = dim(exp_data)[2])
+
+    # Pre-compute PD-corrected covariance matrices (once per interp point)
+    for (j in 1:n_interp) {
+      curr_sigma <- matrix(fitted_mvn_data[(num_PC+1):(num_PC+num_PC^2),j,i], nrow = num_PC)
+      curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
+      if (any(curr_eig < 0)) {
+        sigma_used <- as.matrix(nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE, eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat)
+      } else {
+        sigma_used <- curr_sigma
       }
-      mat[,ind_num] <- vec
+      # Vectorised: evaluate density for all samples at once
+      mat[j, ] <- mvtnorm::dmvnorm(samples_mat, mean = fitted_mvn_data[1:num_PC,j,i], sigma = sigma_used, checkSymmetry = FALSE, log = TRUE)
     }
     mat
   }
 
-  likelihood_array <- array(out_list, dim = c(dim(fitted_mvn_data)[2], dim(exp_data)[2], dim(fitted_mvn_data)[3]))
+  likelihood_array <- array(out_list, dim = c(n_interp, dim(exp_data)[2], dim(fitted_mvn_data)[3]))
 
   if (mode == 'train') {
     object[['Train_Data']][['Train_Likelihood_Array']] <- likelihood_array

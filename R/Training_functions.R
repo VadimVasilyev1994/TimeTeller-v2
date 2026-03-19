@@ -371,25 +371,33 @@ calc_likelis <- function(object, mode = 'train') {
     project_exp_mat <- svd_data[[i]] %*% exp_data
     if (mode == 'test') projections_list[[i]] <- project_exp_mat
 
-    for (ind_num in seq_len(n_samples)) {
-      vec <- numeric(n_interp)
-      for (j in seq_len(n_interp)) {
-        # Reconstruct covariance matrix from vectorised storage
-        curr_sigma <- matrix(fitted_mvn_data[(num_PC + 1):(num_PC + num_PC^2), j, i], nrow = num_PC)
-        # Ensure positive-definiteness (interpolation can introduce small negative eigenvalues)
-        curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
-        if (any(curr_eig < 0)) {
-          sigma_used <- nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE,
-                               eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat
-        } else {
-          sigma_used <- curr_sigma
-        }
-        vec[j] <- mvtnorm::dmvnorm(project_exp_mat[, ind_num],
-                                    mean = fitted_mvn_data[1:num_PC, j, i],
-                                    sigma = sigma_used, checkSymmetry = FALSE)
+    # --- Pre-compute PD-corrected covariance matrices for this projection ---
+    # These depend only on the interpolation point, not on the sample,
+    # so we compute them once and reuse for all samples.
+    sigma_list <- vector("list", n_interp)
+    mean_list <- vector("list", n_interp)
+    for (j in seq_len(n_interp)) {
+      curr_sigma <- matrix(fitted_mvn_data[(num_PC + 1):(num_PC + num_PC^2), j, i], nrow = num_PC)
+      curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
+      if (any(curr_eig < 0)) {
+        sigma_list[[j]] <- as.matrix(nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE,
+                                            eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat)
+      } else {
+        sigma_list[[j]] <- curr_sigma
       }
-      likelihood_array[, ind_num, i] <- vec
+      mean_list[[j]] <- fitted_mvn_data[1:num_PC, j, i]
     }
+
+    # --- Vectorised density evaluation: all samples at each interp point ---
+    # t(project_exp_mat) is n_samples x num_PC, which dmvnorm accepts directly
+    samples_mat <- t(project_exp_mat)
+    for (j in seq_len(n_interp)) {
+      likelihood_array[j, , i] <- mvtnorm::dmvnorm(samples_mat,
+                                                     mean = mean_list[[j]],
+                                                     sigma = sigma_list[[j]],
+                                                     checkSymmetry = FALSE)
+    }
+
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
   }
 
@@ -479,10 +487,8 @@ get_final_likelis_test <- function(object, log_thresh) {
 #' @keywords internal
 theta_calc <- function(object, mode = 'train', epsilon = NULL, eta = NULL) {
   if (mode == 'train') {
-    # Training: epsilon and eta are provided as arguments and stored
     averaged_likelis_rescaled <- t(object[['Train_Data']][['Averaged_Likelis_Post_Thresh_Train']])
   } else {
-    # Testing: retrieve epsilon and eta from the trained model
     epsilon <- object[['Train_Data']][['epsilon']]
     eta <- object[['Train_Data']][['eta']]
     averaged_likelis_rescaled <- t(object[['Test_Data']][['Averaged_Likelis_Post_Thresh_Test']])
@@ -490,28 +496,26 @@ theta_calc <- function(object, mode = 'train', epsilon = NULL, eta = NULL) {
 
   num_samples <- dim(averaged_likelis_rescaled)[1]
   num_points <- dim(averaged_likelis_rescaled)[2]
+  n_eval <- 500L  # spline evaluation points (sufficient for theta precision)
+  eval_seq <- seq(1, num_points, length.out = n_eval)
   thetas <- numeric(num_samples)
 
   for (i in seq_len(num_samples)) {
     curr_sample <- exp(averaged_likelis_rescaled[i,])
     curr_lrf_curve <- curr_sample / max(curr_sample)
-    # Cosine envelope centred on the peak of the likelihood response function
     peak_pos <- which.max(curr_lrf_curve)
     curr_curve <- suppressWarnings(
       eta * (1 + epsilon + cos(2 * pi * ((1:num_points) / num_points - peak_pos / num_points)))
     )
 
     lrf_curve_spline <- stats::predict(
-      periodicSpline(1:num_points, curr_lrf_curve, period = num_points),
-      seq(1, num_points, length.out = 1000)
+      periodicSpline(1:num_points, curr_lrf_curve, period = num_points), eval_seq
     )
     curve_spline <- stats::predict(
-      periodicSpline(1:num_points, curr_curve, period = num_points),
-      seq(1, num_points, length.out = 1000)
+      periodicSpline(1:num_points, curr_curve, period = num_points), eval_seq
     )
 
-    # Theta = fraction of points where LRF exceeds the envelope
-    thetas[i] <- sum(lrf_curve_spline$y > curve_spline$y) / length(lrf_curve_spline$y)
+    thetas[i] <- sum(lrf_curve_spline$y > curve_spline$y) / n_eval
   }
 
   if (mode == 'train') {
@@ -557,6 +561,8 @@ calc_flat_theta_contrib <- function(object, mode = 'train') {
 
   num_samples <- dim(averaged_likelis_rescaled)[1]
   num_points <- dim(averaged_likelis_rescaled)[2]
+  n_eval <- 500L
+  eval_seq <- seq(1, num_points, length.out = n_eval)
   flat_contribution <- numeric(num_samples)
 
   for (i in seq_len(num_samples)) {
@@ -569,12 +575,10 @@ calc_flat_theta_contrib <- function(object, mode = 'train') {
       eta * (1 + epsilon + cos(2 * pi * ((1:num_points) / num_points - peak_pos / num_points)))
     )
     lrf_curve_spline <- stats::predict(
-      periodicSpline(1:num_points, ind_lrf_curve, period = num_points),
-      seq(1, num_points, length.out = 1000)
+      periodicSpline(1:num_points, ind_lrf_curve, period = num_points), eval_seq
     )
     curve_spline <- stats::predict(
-      periodicSpline(1:num_points, curr_curve, period = num_points),
-      seq(1, num_points, length.out = 1000)
+      periodicSpline(1:num_points, curr_curve, period = num_points), eval_seq
     )
 
     theta_index <- which(lrf_curve_spline$y > curve_spline$y)
