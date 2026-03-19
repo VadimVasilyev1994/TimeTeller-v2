@@ -1276,9 +1276,13 @@ plot_var_importance <- function(object) {
   bbb$Gene <- rep(genes, length(proj_names))
   ccc <- bbb %>% tidyr::pivot_longer(cols = -Gene) %>% dplyr::mutate(value = abs(value)) %>%
     dplyr::mutate(name = as.factor(name), Gene = tidytext::reorder_within(Gene, value, name))
-  ggplot(ccc, aes(x = Gene, y = value, color = Gene, fill = Gene)) + geom_boxplot(show.legend = FALSE) +
-    labs(y = 'Loading', title = 'Gene loadings') + facet_wrap(vars(name), nrow = 2, scales = 'free') +
-    coord_flip() + tidytext::scale_x_reordered()
+  ggplot(ccc, aes(x = Gene, y = value, fill = Gene)) +
+    geom_boxplot(show.legend = FALSE, alpha = 0.7) +
+    labs(y = 'Loading', x = NULL, title = 'Gene loadings across local projections') +
+    facet_wrap(vars(name), nrow = 2, scales = 'free') +
+    coord_flip() + tidytext::scale_x_reordered() +
+    theme_tt() +
+    theme(axis.text.y = element_text(size = 9))
 }
 
 
@@ -1300,8 +1304,12 @@ plot_pc_importance <- function(object) {
   named_list <- lapply(object$Projections$SVD_Per_Time_Point_Var_Explained, give_names)
   data_vec <- purrr::list_c(named_list)
   data_df <- data.frame(value = unname(data_vec), name = names(data_vec))
-  ggplot(data_df, aes(x = name, y = value, color = name, fill = name)) + geom_boxplot(show.legend = FALSE) +
-    labs(x = 'Principal Component',y = 'Cumulative variation explained', title = 'Explained Variation')
+  ggplot(data_df, aes(x = name, y = value, fill = name)) +
+    geom_boxplot(show.legend = FALSE, alpha = 0.7) +
+    scale_fill_manual(values = rep(tt_palette, length.out = length(unique(data_df$name)))) +
+    labs(x = 'Principal Component', y = 'Cumulative variation explained',
+         title = 'Explained variation by PC') +
+    theme_tt()
 }
 
 # Internal helper: add MVN ellipsoid density traces to a plotly figure (not exported)
