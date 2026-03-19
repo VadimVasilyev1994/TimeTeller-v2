@@ -55,30 +55,201 @@
 <div class="page-header"><h1 id="timeteller">TimeTeller<a class="anchor" aria-label="anchor" href="#timeteller"></a>
 </h1></div>
 <!-- badges: start -->
-<!-- badges: end -->
-<p>TimeTeller is the machine learning tool that analyses the local circadian clock as a system. It aims to estimate the circadian clock phase and the level of dysfunction from a single sample by modelling the multi-dimensional state of the clock.</p>
+
+<p>TimeTeller is a machine learning tool for estimating <strong>circadian clock phase</strong> and <strong>clock dysfunction (Θ)</strong> from a single transcriptomic sample. It models the multi-dimensional state of the circadian clock by projecting gene expression onto local principal component spaces fitted to known circadian time series, then evaluates multivariate normal likelihoods across the 24-hour cycle to infer the most likely phase and quantify how well-ordered the clock signature is.</p>
+<p>TimeTeller works with both <strong>microarray</strong> and <strong>RNA-seq</strong> data and supports any organism for which circadian time-course training data is available.</p>
+<div class="section level2">
+<h2 id="key-features">Key features<a class="anchor" aria-label="anchor" href="#key-features"></a>
+</h2>
+<ul>
+<li>
+<strong>Single-sample phase estimation</strong> — no time-course design required for test samples</li>
+<li>
+<strong>Clock dysfunction score (Θ)</strong> — quantifies deviation from a healthy circadian programme</li>
+<li>
+<strong>Automated gene selection</strong> — population cosinor-based ranking with MRL, amplitude CV, and composite weighting via <code><a href="reference/choose_genes_tt.html">choose_genes_tt()</a></code>
+</li>
+<li>
+<strong>Wasserstein geodesic interpolation</strong> — optional geometry-aware covariance interpolation that guarantees positive-definiteness (Mallasto et al. 2020)</li>
+<li>
+<strong>Cross-validation framework</strong> — leave-one-out CV with group-level prediction error and Θ diagnostics</li>
+<li>
+<strong>Publication-ready visualisation</strong> — consistent ggplot2 theme with colourblind-safe palettes</li>
+<li>
+<strong>Parallel computation</strong> — optional multi-core support for likelihood and theta calculations</li>
+</ul>
+</div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>You can install the development version of TimeTeller from <a href="https://github.com/" class="external-link">GitHub</a> with:</p>
+<p>Install the development version from GitHub:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("devtools")</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"VadimVasilyev1994/TimeTeller-v2"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="information">Information<a class="anchor" aria-label="anchor" href="#information"></a>
+<h2 id="quick-start">Quick start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
 </h2>
-<p>This is a basic example which shows you how to solve a common problem:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># load the package</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/VadimVasilyev1994/TimeTeller-v2" class="external-link">TimeTeller</a></span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/VadimVasilyev1994/TimeTeller-v2" class="external-link">TimeTeller</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># function help</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/help.html" class="external-link">help</a></span><span class="op">(</span><span class="va">train_model</span><span class="op">)</span></span>
+<span><span class="co"># Train on oral mucosa microarray data (Bjarnason et al.)</span></span>
+<span><span class="co"># 10 individuals, 6 time points each, 4h apart</span></span>
+<span><span class="va">tt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_model.html">train_model</a></span><span class="op">(</span></span>
+<span>  exp_matrix <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">expr_mat</span>,</span>
+<span>  genes      <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">probes_used</span>,</span>
+<span>  group_1    <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">group</span>,</span>
+<span>  time       <span class="op">=</span> <span class="va">bjarn_data</span><span class="op">$</span><span class="va">time</span>,</span>
+<span>  log_thresh <span class="op">=</span> <span class="op">-</span><span class="fl">5</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Training results</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Samples:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">tt</span><span class="op">$</span><span class="va">Train_Data</span><span class="op">$</span><span class="va">Results_df</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Samples: 60</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Theta range:"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="va">tt</span><span class="op">$</span><span class="va">Train_Data</span><span class="op">$</span><span class="va">Results_df</span><span class="op">$</span><span class="va">Theta</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Theta range: 0.008 0.194</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"MAE (hours):"</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">tt</span><span class="op">$</span><span class="va">Train_Data</span><span class="op">$</span><span class="va">Results_df</span><span class="op">$</span><span class="va">Pred_Error</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; MAE (hours): 0.91</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="standard-workflow">Standard workflow<a class="anchor" aria-label="anchor" href="#standard-workflow"></a>
+</h2>
+<p>A typical TimeTeller analysis follows these steps:</p>
+<div class="section level3">
+<h3 id="id_1-train-the-model">1. Train the model<a class="anchor" aria-label="anchor" href="#id_1-train-the-model"></a>
+</h3>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_model.html">train_model</a></span><span class="op">(</span></span>
+<span>  exp_matrix <span class="op">=</span> <span class="va">training_expression</span>,   <span class="co"># genes x samples matrix</span></span>
+<span>  genes      <span class="op">=</span> <span class="va">gene_names</span>,            <span class="co"># character vector of gene/probe IDs</span></span>
+<span>  group_1    <span class="op">=</span> <span class="va">individual_ids</span>,        <span class="co"># grouping variable (e.g. individual)</span></span>
+<span>  time       <span class="op">=</span> <span class="va">sample_times</span>,          <span class="co"># known zeitgeber/clock times</span></span>
+<span>  log_thresh <span class="op">=</span> <span class="op">-</span><span class="fl">5</span>                     <span class="co"># log-likelihood threshold</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="id_2-select-the-log-threshold">2. Select the log threshold<a class="anchor" aria-label="anchor" href="#id_2-select-the-log-threshold"></a>
+</h3>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">lt_df</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/choose_logthresh.html">choose_logthresh</a></span><span class="op">(</span><span class="va">tt</span>, max_log <span class="op">=</span> <span class="fl">0</span>, min_log <span class="op">=</span> <span class="op">-</span><span class="fl">10</span>, by_step <span class="op">=</span> <span class="op">-</span><span class="fl">0.5</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/choose_logthresh_plot.html">choose_logthresh_plot</a></span><span class="op">(</span><span class="va">lt_df</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="id_3-test-on-new-samples">3. Test on new samples<a class="anchor" aria-label="anchor" href="#id_3-test-on-new-samples"></a>
+</h3>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/test_model.html">test_model</a></span><span class="op">(</span></span>
+<span>  <span class="va">tt</span>,</span>
+<span>  exp_matrix   <span class="op">=</span> <span class="va">test_expression</span>,</span>
+<span>  test_group_1 <span class="op">=</span> <span class="va">test_ids</span>,</span>
+<span>  test_time    <span class="op">=</span> <span class="va">test_times</span>,       <span class="co"># known times (for validation) or NA</span></span>
+<span>  log_thresh   <span class="op">=</span> <span class="op">-</span><span class="fl">5</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="id_4-assess-results">4. Assess results<a class="anchor" aria-label="anchor" href="#id_4-assess-results"></a>
+</h3>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Phase estimates and dysfunction scores</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/View.html" class="external-link">View</a></span><span class="op">(</span><span class="va">tt</span><span class="op">$</span><span class="va">Test_Data</span><span class="op">$</span><span class="va">Results_df</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># info about data included in the package</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/help.html" class="external-link">help</a></span><span class="op">(</span><span class="va">panda_data</span><span class="op">)</span></span></code></pre></div>
-<p>Examples and documentation available at <a href="https://vadimvasilyev1994.github.io/TimeTeller/">TimeTeller</a>.</p>
+<span><span class="co"># Visualise</span></span>
+<span><span class="fu"><a href="reference/plotPCs_test.html">plotPCs_test</a></span><span class="op">(</span><span class="va">tt</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/exprs_vs_PredTime_plot.html">exprs_vs_PredTime_plot</a></span><span class="op">(</span><span class="va">tt</span>, genes <span class="op">=</span> <span class="va">gene_names</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span><span class="op">]</span>, theta_thresh <span class="op">=</span> <span class="fl">0.3</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="id_5-cross-validation">5. Cross-validation<a class="anchor" aria-label="anchor" href="#id_5-cross-validation"></a>
+</h3>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cv_res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_cv.html">train_cv</a></span><span class="op">(</span></span>
+<span>  group_to_leave_out <span class="op">=</span> <span class="st">'group_1'</span>,</span>
+<span>  exp_matrix <span class="op">=</span> <span class="va">training_expression</span>,</span>
+<span>  genes <span class="op">=</span> <span class="va">gene_names</span>,</span>
+<span>  group_1 <span class="op">=</span> <span class="va">individual_ids</span>,</span>
+<span>  time <span class="op">=</span> <span class="va">sample_times</span>,</span>
+<span>  log_thresh <span class="op">=</span> <span class="op">-</span><span class="fl">5</span>,</span>
+<span>  test_grouping_vars <span class="op">=</span> <span class="st">'group_1'</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/plot_cv_res.html">plot_cv_res</a></span><span class="op">(</span><span class="va">cv_res</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/plot_deviation_cv_original.html">plot_deviation_cv_original</a></span><span class="op">(</span><span class="va">cv_res</span><span class="op">)</span></span></code></pre></div>
+</div>
+</div>
+<div class="section level2">
+<h2 id="gene-selection">Gene selection<a class="anchor" aria-label="anchor" href="#gene-selection"></a>
+</h2>
+<p>TimeTeller includes an automated gene selection procedure based on population cosinor analysis:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/choose_genes_tt.html">choose_genes_tt</a></span><span class="op">(</span><span class="va">tt</span>, pval_cutoff <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/View.html" class="external-link">View</a></span><span class="op">(</span><span class="va">tt</span><span class="op">$</span><span class="va">Rhythmicity_Results</span><span class="op">)</span></span></code></pre></div>
+<p>Genes are ranked by a weighted composite of p-value, R², phase consistency (mean resultant length), and amplitude reliability (CV of relative amplitude). The weights are customisable via the <code>rank_weights</code> argument.</p>
+</div>
+<div class="section level2">
+<h2 id="covariance-interpolation">Covariance interpolation<a class="anchor" aria-label="anchor" href="#covariance-interpolation"></a>
+</h2>
+<p>By default, multivariate normal parameters are interpolated between training time points using periodic splines (<code>cov_path = 'spline'</code>). TimeTeller v2 also supports <strong>Wasserstein (Bures) geodesic interpolation</strong>, which preserves the positive-definite geometry of covariance matrices:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_model.html">train_model</a></span><span class="op">(</span></span>
+<span>  <span class="va">...</span>,</span>
+<span>  cov_path <span class="op">=</span> <span class="st">'wasserstein'</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>To assess the proportion of interpolated covariances requiring positive-definiteness correction under spline interpolation, use the <code>diagnose_pd</code> argument:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/train_model.html">train_model</a></span><span class="op">(</span><span class="va">...</span>, diagnose_pd <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co"># nearPD diagnostic: X / Y covariance matrices required correction (Z%)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="bundled-datasets">Bundled datasets<a class="anchor" aria-label="anchor" href="#bundled-datasets"></a>
+</h2>
+<table class="table">
+<colgroup>
+<col width="25%">
+<col width="25%">
+<col width="25%">
+<col width="25%">
+</colgroup>
+<thead><tr class="header">
+<th>Dataset</th>
+<th>Description</th>
+<th>Organism</th>
+<th>Platform</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>bjarn_data</code></td>
+<td>Oral mucosa, 10 individuals × 6 time points</td>
+<td>Human</td>
+<td>Microarray</td>
+</tr>
+<tr class="even">
+<td><code>panda_data</code></td>
+<td>Baboon multi-tissue circadian atlas</td>
+<td>Baboon</td>
+<td>RNA-seq</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level2">
+<h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
+</h2>
+<p>If you use TimeTeller, please cite:</p>
+<blockquote>
+<p>Vlachou D, Veretennikova MA, Stringari C, Vasilyev V, et al. TimeTeller: a tool to probe the circadian clock as a multigene dynamical system. <em>PLOS Computational Biology</em>. 2024;20(4):e1011779.</p>
+</blockquote>
+</div>
+<div class="section level2">
+<h2 id="related-publications">Related publications<a class="anchor" aria-label="anchor" href="#related-publications"></a>
+</h2>
+<ul>
+<li>Vlachou et al. (2024) TimeTeller: a tool to probe the circadian clock as a multigene dynamical system. <em>PLOS Computational Biology</em>, 20(4):e1011779.</li>
+<li>Bjarnason et al. (2001) Circadian expression of clock genes in human oral mucosa and skin. <em>The American Journal of Pathology</em>, 158(5):1793-1801.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
+</h2>
+<p>GPL (&gt;= 3)</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
@@ -112,7 +283,13 @@
 </ul>
 </div>
 
-
+<div class="dev-status">
+<h2 data-toc-skip>Dev status</h2>
+<ul class="list-unstyled">
+<li><a href=""><img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version"></a></li>
+<li><a href="https://www.gnu.org/licenses/gpl-3.0" class="external-link"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a></li>
+</ul>
+</div>
 
   </aside>
 </div>
