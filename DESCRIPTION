@@ -1,6 +1,6 @@
 Package: TimeTeller
 Title: Inferring circadian clock phase and dysfunction from single samples
-Version: 1.0.0
+Version: 2.0.0
 Authors@R: 
     person("Vadim", "Vasilyev", email = "vadim.vasilyev@warwick.ac.uk", role = c("aut", "cre"))
 Maintainer: Vadim Vasilyev <vadim.vasilyev@warwick.ac.uk>
