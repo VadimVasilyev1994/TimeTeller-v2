@@ -4,37 +4,203 @@
 # TimeTeller
 
 <!-- badges: start -->
+
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)]()
+[![License: GPL
+v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 <!-- badges: end -->
 
-TimeTeller is the machine learning tool that analyses the local
-circadian clock as a system. It aims to estimate the circadian clock
-phase and the level of dysfunction from a single sample by modelling the
-multi-dimensional state of the clock.
+TimeTeller is a machine learning tool for estimating **circadian clock
+phase** and **clock dysfunction (Θ)** from a single transcriptomic
+sample. It models the multi-dimensional state of the circadian clock by
+projecting gene expression onto local principal component spaces fitted
+to known circadian time series, then evaluates multivariate normal
+likelihoods across the 24-hour cycle to infer the most likely phase and
+quantify how well-ordered the clock signature is.
+
+TimeTeller works with both **microarray** and **RNA-seq** data and
+supports any organism for which circadian time-course training data is
+available.
+
+## Key features
+
+- **Single-sample phase estimation** — no time-course design required
+  for test samples
+- **Clock dysfunction score (Θ)** — quantifies deviation from a healthy
+  circadian programme
+- **Automated gene selection** — population cosinor-based ranking with
+  MRL, amplitude CV, and composite weighting via `choose_genes_tt()`
+- **Wasserstein geodesic interpolation** — optional geometry-aware
+  covariance interpolation that guarantees positive-definiteness
+  (Mallasto et al. 2020)
+- **Cross-validation framework** — leave-one-out CV with group-level
+  prediction error and Θ diagnostics
+- **Publication-ready visualisation** — consistent ggplot2 theme with
+  colourblind-safe palettes
+- **Parallel computation** — optional multi-core support for likelihood
+  and theta calculations
 
 ## Installation
 
-You can install the development version of TimeTeller from
-[GitHub](https://github.com/) with:
+Install the development version from GitHub:
 
 ``` r
 # install.packages("devtools")
 devtools::install_github("VadimVasilyev1994/TimeTeller-v2")
 ```
 
-## Information
-
-This is a basic example which shows you how to solve a common problem:
+## Quick start
 
 ``` r
-# load the package
 library(TimeTeller)
 
-# function help
-help(train_model)
-
-# info about data included in the package
-help(panda_data)
+# Train on oral mucosa microarray data (Bjarnason et al.)
+# 10 individuals, 6 time points each, 4h apart
+tt <- train_model(
+  exp_matrix = bjarn_data$expr_mat,
+  genes      = bjarn_data$probes_used,
+  group_1    = bjarn_data$group,
+  time       = bjarn_data$time,
+  log_thresh = -5
+)
 ```
 
-Examples and documentation available at
-[TimeTeller](https://vadimvasilyev1994.github.io/TimeTeller/).
+``` r
+# Training results
+cat("Samples:", nrow(tt$Train_Data$Results_df), "\n")
+#> Samples: 60
+cat("Theta range:", round(range(tt$Train_Data$Results_df$Theta), 3), "\n")
+#> Theta range: 0.008 0.194
+cat("MAE (hours):", round(mean(abs(tt$Train_Data$Results_df$Pred_Error)), 2), "\n")
+#> MAE (hours): 0.91
+```
+
+## Standard workflow
+
+A typical TimeTeller analysis follows these steps:
+
+### 1. Train the model
+
+``` r
+tt <- train_model(
+  exp_matrix = training_expression,   # genes x samples matrix
+  genes      = gene_names,            # character vector of gene/probe IDs
+  group_1    = individual_ids,        # grouping variable (e.g. individual)
+  time       = sample_times,          # known zeitgeber/clock times
+  log_thresh = -5                     # log-likelihood threshold
+)
+```
+
+### 2. Select the log threshold
+
+``` r
+lt_df <- choose_logthresh(tt, max_log = 0, min_log = -10, by_step = -0.5)
+choose_logthresh_plot(lt_df)
+```
+
+### 3. Test on new samples
+
+``` r
+tt <- test_model(
+  tt,
+  exp_matrix   = test_expression,
+  test_group_1 = test_ids,
+  test_time    = test_times,       # known times (for validation) or NA
+  log_thresh   = -5
+)
+```
+
+### 4. Assess results
+
+``` r
+# Phase estimates and dysfunction scores
+View(tt$Test_Data$Results_df)
+
+# Visualise
+plotPCs_test(tt)
+exprs_vs_PredTime_plot(tt, genes = gene_names[1:4], theta_thresh = 0.3)
+```
+
+### 5. Cross-validation
+
+``` r
+cv_res <- train_cv(
+  group_to_leave_out = 'group_1',
+  exp_matrix = training_expression,
+  genes = gene_names,
+  group_1 = individual_ids,
+  time = sample_times,
+  log_thresh = -5,
+  test_grouping_vars = 'group_1'
+)
+
+plot_cv_res(cv_res)
+plot_deviation_cv_original(cv_res)
+```
+
+## Gene selection
+
+TimeTeller includes an automated gene selection procedure based on
+population cosinor analysis:
+
+``` r
+tt <- choose_genes_tt(tt, pval_cutoff = 0.05)
+View(tt$Rhythmicity_Results)
+```
+
+Genes are ranked by a weighted composite of p-value, R², phase
+consistency (mean resultant length), and amplitude reliability (CV of
+relative amplitude). The weights are customisable via the `rank_weights`
+argument.
+
+## Covariance interpolation
+
+By default, multivariate normal parameters are interpolated between
+training time points using periodic splines (`cov_path = 'spline'`).
+TimeTeller v2 also supports **Wasserstein (Bures) geodesic
+interpolation**, which preserves the positive-definite geometry of
+covariance matrices:
+
+``` r
+tt <- train_model(
+  ...,
+  cov_path = 'wasserstein'
+)
+```
+
+To assess the proportion of interpolated covariances requiring
+positive-definiteness correction under spline interpolation, use the
+`diagnose_pd` argument:
+
+``` r
+tt <- train_model(..., diagnose_pd = TRUE)
+# nearPD diagnostic: X / Y covariance matrices required correction (Z%)
+```
+
+## Bundled datasets
+
+| Dataset | Description | Organism | Platform |
+|----|----|----|----|
+| `bjarn_data` | Oral mucosa, 10 individuals × 6 time points | Human | Microarray |
+| `panda_data` | Baboon multi-tissue circadian atlas | Baboon | RNA-seq |
+
+## Citation
+
+If you use TimeTeller, please cite:
+
+> Vlachou D, Veretennikova MA, Stringari C, Vasilyev V, et
+> al. TimeTeller: a tool to probe the circadian clock as a multigene
+> dynamical system. *PLOS Computational Biology*. 2024;20(4):e1011779.
+
+## Related publications
+
+- Vlachou et al. (2024) TimeTeller: a tool to probe the circadian clock
+  as a multigene dynamical system. *PLOS Computational Biology*,
+  20(4):e1011779.
+- Bjarnason et al. (2001) Circadian expression of clock genes in human
+  oral mucosa and skin. *The American Journal of Pathology*,
+  158(5):1793-1801.
+
+## License
+
+GPL (\>= 3)
