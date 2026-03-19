@@ -334,6 +334,82 @@ get_mvn_interpolated <- function(object, num_interp_points = 144, interp_method 
     object[['Projections']][['Fitted_MVN_Interpolated']] <- interpolated_array
     return(object)
   }
+
+  if (cov_path == 'wasserstein') {
+    # Wasserstein (Bures) geodesic for covariance interpolation.
+    # For adjacent knots K0, K1, the geodesic at parameter t is:
+    #   K(t) = (1-t)^2*K(0) + t^2*K(1) + t(1-t)[(K(0)*K(1))^{1/2} + (K(1)*K(0))^{1/2}]
+    # This guarantees PD at every interpolation point (Mallasto et al. 2020, Eq. 9).
+    # Means are interpolated via splines as in the other paths.
+
+    for (j in 1:dims_array[3]) {
+      num_points <- num_interp_points + dims_array[3]
+      times_num <- as.numeric(substring(colnames(likelihood_array), first = 6))
+
+      # Compute number of interpolation points per segment (proportional to time gap)
+      interpolation_points <- c()
+      for (i in 1:length(times_num)) {
+        next_i <- ifelse(i + 1 > length(times_num), 1, i + 1)
+        gap <- abs(circular_difference(times_num[i], times_num[next_i]))
+        interpolation_points[i] <- length(seq(0, 1, length.out = floor((gap * 60) / (24 * 60 / num_points))))
+      }
+
+      interp_res <- list()
+      for (i in 1:length(times_num)) {
+        next_i <- ifelse(i + 1 > length(times_num), 1, i + 1)
+        K0 <- matrix(likelihood_array[(numPC + 1):(numPC + numPC^2), i, j], nrow = numPC)
+        K1 <- matrix(likelihood_array[(numPC + 1):(numPC + numPC^2), next_i, j], nrow = numPC)
+        interp_t <- seq(0, 1, length.out = interpolation_points[i])
+
+        # Pre-compute the cross terms (K0 K1)^{1/2} and (K1 K0)^{1/2}
+        # Use: (AB)^{1/2} = A^{1/2} (A^{1/2} B A^{1/2})^{1/2} A^{-1/2}
+        K0_sqrt <- expm::sqrtm(K0)
+        K0_inv_sqrt <- solve(K0_sqrt)
+        inner <- K0_sqrt %*% K1 %*% K0_sqrt
+        inner_sqrt <- expm::sqrtm(inner)
+        K0K1_sqrt <- K0_sqrt %*% inner_sqrt %*% K0_inv_sqrt  # (K0 K1)^{1/2}
+        K1K0_sqrt <- t(K0K1_sqrt)  # (K1 K0)^{1/2} = [(K0 K1)^{1/2}]^T for symmetric K0, K1
+
+        mat_list <- matrix(NA, nrow = numPC^2, ncol = length(interp_t))
+        for (k in seq_along(interp_t)) {
+          tt <- interp_t[k]
+          Kt <- (1 - tt)^2 * K0 + tt^2 * K1 + tt * (1 - tt) * (K0K1_sqrt + K1K0_sqrt)
+          mat_list[, k] <- as.vector(Kt)
+        }
+
+        t_start <- times_num[i]
+        t_end <- ifelse(next_i == 1, times_num[1] + 24, times_num[next_i])
+        mat_names <- paste0('Time_', round(seq(t_start, t_end, length.out = interpolation_points[i]), 2))
+        colnames(mat_list) <- mat_names
+        if (i > 1) mat_list <- mat_list[, -1]
+        interp_res[[i]] <- mat_list
+      }
+
+      check <- do.call(cbind, interp_res)
+      check <- check[, !duplicated(colnames(check))]
+      interpolated_array <- interpolated_array[, 1:dim(check)[2], ]
+      interpolated_array[(numPC + 1):(numPC + numPC^2), , j] <- check
+
+      # Interpolate means via splines (same as other paths)
+      for (i in 1:numPC) {
+        ts_to_interpolate <- likelihood_array[i, , j]
+        ts_to_interpolate_periodic <- c(ts_to_interpolate, ts_to_interpolate[1])
+
+        if (interp_method == 'perpchip') {
+          interpolated_array[i, , j] <- perpchip(times_periodic, ts_to_interpolate_periodic, seq(min(times_periodic), max(times_periodic), length.out = dim(check)[2]))
+        }
+        if (interp_method == 'standard') {
+          interpolated_array[i, , j] <- stats::spline(times_periodic, ts_to_interpolate_periodic, n = dim(check)[2], method = "periodic")$y
+        }
+      }
+
+      dimnames(interpolated_array)[[2]] <- colnames(check)
+    }
+
+    dimnames(interpolated_array) <- list(dimnames(likelihood_array)[[1]], dimnames(interpolated_array)[[2]], dimnames(likelihood_array)[[3]])
+    object[['Projections']][['Fitted_MVN_Interpolated']] <- interpolated_array
+    return(object)
+  }
 }
 
 #' Compute log-likelihood array across all local projections
@@ -347,7 +423,7 @@ get_mvn_interpolated <- function(object, num_interp_points = 144, interp_method 
 #' @param mode either 'train' or 'test'
 #' @return Updated object with log-likelihood array (and test projections if mode='test')
 #' @keywords internal
-calc_likelis <- function(object, mode = 'train') {
+calc_likelis <- function(object, mode = 'train', diagnose_pd = FALSE) {
   svd_data <- object[['Projections']][['SVD_Per_Time_Point']]
   fitted_mvn_data <- object[['Projections']][['Fitted_MVN_Interpolated']]
   num_PC <- object[['PC_Num']]
@@ -367,19 +443,25 @@ calc_likelis <- function(object, mode = 'train') {
   # Store test projections for downstream visualisation
   if (mode == 'test') projections_list <- list()
 
+  # Track nearPD corrections if diagnostics requested
+  if (diagnose_pd) {
+    pd_total <- 0L
+    pd_corrected <- 0L
+  }
+
   for (i in seq_along(names(svd_data))) {
     project_exp_mat <- svd_data[[i]] %*% exp_data
     if (mode == 'test') projections_list[[i]] <- project_exp_mat
 
     # --- Pre-compute PD-corrected covariance matrices for this projection ---
-    # These depend only on the interpolation point, not on the sample,
-    # so we compute them once and reuse for all samples.
     sigma_list <- vector("list", n_interp)
     mean_list <- vector("list", n_interp)
     for (j in seq_len(n_interp)) {
       curr_sigma <- matrix(fitted_mvn_data[(num_PC + 1):(num_PC + num_PC^2), j, i], nrow = num_PC)
       curr_eig <- eigen(curr_sigma, symmetric = TRUE, only.values = TRUE)$values
+      if (diagnose_pd) pd_total <- pd_total + 1L
       if (any(curr_eig < 0)) {
+        if (diagnose_pd) pd_corrected <- pd_corrected + 1L
         sigma_list[[j]] <- as.matrix(nearPD(curr_sigma, base.matrix = TRUE, ensureSymmetry = TRUE,
                                             eig.tol = 1e-05, conv.tol = 1e-06, posd.tol = 1e-07)$mat)
       } else {
@@ -389,7 +471,6 @@ calc_likelis <- function(object, mode = 'train') {
     }
 
     # --- Vectorised density evaluation: all samples at each interp point ---
-    # t(project_exp_mat) is n_samples x num_PC, which dmvnorm accepts directly
     samples_mat <- t(project_exp_mat)
     for (j in seq_len(n_interp)) {
       likelihood_array[j, , i] <- mvtnorm::dmvnorm(samples_mat,
@@ -399,6 +480,13 @@ calc_likelis <- function(object, mode = 'train') {
     }
 
     cat("\rFinished", i, "of", length(names(svd_data)), "\n")
+  }
+
+  # Report nearPD diagnostics
+  if (diagnose_pd) {
+    pct <- round(100 * pd_corrected / pd_total, 2)
+    message("nearPD diagnostic: ", pd_corrected, " / ", pd_total,
+            " covariance matrices required correction (", pct, "%)")
   }
 
   # Store results in appropriate slots
@@ -413,11 +501,11 @@ calc_likelis <- function(object, mode = 'train') {
 }
 
 # Backward-compatible wrappers
-calc_train_likelis <- function(object) {
-  calc_likelis(object, mode = 'train')
+calc_train_likelis <- function(object, diagnose_pd = FALSE) {
+  calc_likelis(object, mode = 'train', diagnose_pd = diagnose_pd)
 }
-calc_test_likelis <- function(object) {
-  calc_likelis(object, mode = 'test')
+calc_test_likelis <- function(object, diagnose_pd = FALSE) {
+  calc_likelis(object, mode = 'test', diagnose_pd = diagnose_pd)
 }
 
 ## ---------------------------------------------------------------------------

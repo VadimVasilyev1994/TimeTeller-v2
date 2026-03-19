@@ -22,7 +22,8 @@ test_model(
   nups = 1,
   ndowns = 0,
   threshold = 0,
-  npeaks = 2
+  npeaks = 2,
+  diagnose_pd = FALSE
 )
 }
 \arguments{
@@ -61,6 +62,8 @@ test_model(
 \item{threshold}{this is used internally with \code{pracma} package to locate peaks. No reason to change, however included for future testing / development}
 
 \item{npeaks}{this is used internally with \code{pracma} package to locate peaks. No reason to change, however included for future testing / development}
+
+\item{diagnose_pd}{if TRUE, prints the proportion of interpolated covariance matrices that required nearPD correction. Default is FALSE}
 }
 \value{
 Returned is the rich object of class \code{list} containing the results for both train and test models.

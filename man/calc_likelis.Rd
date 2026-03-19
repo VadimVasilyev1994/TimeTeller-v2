@@ -4,7 +4,7 @@
 \alias{calc_likelis}
 \title{Compute log-likelihood array across all local projections}
 \usage{
-calc_likelis(object, mode = "train")
+calc_likelis(object, mode = "train", diagnose_pd = FALSE)
 }
 \arguments{
 \item{object}{TimeTeller list object}

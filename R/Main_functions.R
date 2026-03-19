@@ -64,6 +64,7 @@
 #'
 #'
 #'
+#' @param diagnose_pd if TRUE, prints the proportion of interpolated covariance matrices that required nearPD correction. Useful for assessing interpolation quality. Default is FALSE
 #' @return Returned is the rich object of class \code{list} containing the TimeTeller model for further analysis
 #' @export
 #'
@@ -76,7 +77,8 @@ train_model <- function(exp_matrix, genes, group_1, group_2, group_3, time, repl
                         treat_independently = TRUE, combine_for_norm = FALSE, parallel_comp = FALSE, cores = 4,
                         method = 'intergene', grouping_vars = c('Group'), num_PC = 3, log_thresh, epsilon = 0.4, eta = 0.35,
                         cov_estimate = 'normal', alpha_par = 0.75, num_interp_points = 144, interp_method = 'perpchip', cov_path = 'spline',
-                        minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
+                        minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2,
+                        diagnose_pd = FALSE) {
   if(parallel_comp) {
     my.cluster <- parallel::makeCluster(
       cores,
@@ -98,7 +100,7 @@ train_model <- function(exp_matrix, genes, group_1, group_2, group_3, time, repl
   if(parallel_comp) {
     object <- calc_train_likelis_dev_test(object)
   } else {
-    object <- calc_train_likelis(object)
+    object <- calc_train_likelis(object, diagnose_pd = diagnose_pd)
   }
   object <- get_final_likelis_train(object, log_thresh = log_thresh)
   if(parallel_comp) {
@@ -238,13 +240,15 @@ train_cv <- function(group_to_leave_out = 'group_1', genes, exp_matrix, test_gro
 #'
 #' @author Vadim Vasilyev
 #'
+#' @param diagnose_pd if TRUE, prints the proportion of interpolated covariance matrices that required nearPD correction. Default is FALSE
 #'
 #' @return Returned is the rich object of class \code{list} containing the results for both train and test models.
 #' @export
 #'
 
 test_model <- function(object, exp_matrix, test_grouping_vars, test_group_1, test_group_2, test_group_3, test_replicate, test_time, mat_normalised_test = TRUE,
-                       log_thresh, parallel_comp = FALSE, cores = 4, minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2) {
+                       log_thresh, parallel_comp = FALSE, cores = 4, minpeakheight = -Inf, minpeakdistance = 1, nups = 1, ndowns = 0, threshold = 0, npeaks = 2,
+                       diagnose_pd = FALSE) {
   if(parallel_comp) {
     my.cluster <- parallel::makeCluster(
       cores,
@@ -259,7 +263,7 @@ test_model <- function(object, exp_matrix, test_grouping_vars, test_group_1, tes
   if(parallel_comp) {
     object <- calc_test_likelis_dev_test(object)
   } else {
-    object <- calc_test_likelis(object)
+    object <- calc_test_likelis(object, diagnose_pd = diagnose_pd)
   }
   object <- get_final_likelis_test(object, log_thresh = log_thresh)
   if(parallel_comp) {
