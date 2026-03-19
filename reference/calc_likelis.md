@@ -8,7 +8,7 @@ samples x local_projections)
 ## Usage
 
 ``` r
-calc_likelis(object, mode = "train")
+calc_likelis(object, mode = "train", diagnose_pd = FALSE)
 ```
 
 ## Arguments

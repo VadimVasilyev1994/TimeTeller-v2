@@ -34,7 +34,8 @@ train_model(
   nups = 1,
   ndowns = 0,
   threshold = 0,
-  npeaks = 2
+  npeaks = 2,
+  diagnose_pd = FALSE
 )
 ```
 
@@ -209,6 +210,12 @@ train_model(
 
   this is used internally with `pracma` package to locate peaks. No
   reason to change, however included for future testing / development
+
+- diagnose_pd:
+
+  if TRUE, prints the proportion of interpolated covariance matrices
+  that required nearPD correction. Useful for assessing interpolation
+  quality. Default is FALSE
 
 ## Value
 

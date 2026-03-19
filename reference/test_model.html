@@ -63,7 +63,8 @@ Among the outputs are the estimated time for each sample and the clock dysfuncti
 <span>  nups <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  ndowns <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  threshold <span class="op">=</span> <span class="fl">0</span>,</span>
-<span>  npeaks <span class="op">=</span> <span class="fl">2</span></span>
+<span>  npeaks <span class="op">=</span> <span class="fl">2</span>,</span>
+<span>  diagnose_pd <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -141,6 +142,10 @@ Among the outputs are the estimated time for each sample and the clock dysfuncti
 
 <dt id="arg-npeaks">npeaks<a class="anchor" aria-label="anchor" href="#arg-npeaks"></a></dt>
 <dd><p>this is used internally with <code>pracma</code> package to locate peaks. No reason to change, however included for future testing / development</p></dd>
+
+
+<dt id="arg-diagnose-pd">diagnose_pd<a class="anchor" aria-label="anchor" href="#arg-diagnose-pd"></a></dt>
+<dd><p>if TRUE, prints the proportion of interpolated covariance matrices that required nearPD correction. Default is FALSE</p></dd>
 
 </dl></div>
     <div class="section level2">
